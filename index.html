@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema de Rifa</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Modal de Login -->
+    <div id="loginModal" class="login-modal hidden">
+      <div class="login-content">
+        <h2 class="login-title">
+          <i class="fas fa-lock"></i> Acesso do Moderador
+        </h2>
+        <p style="margin-bottom: 20px; color: #666">
+          Digite suas credenciais para acessar o modo moderador
+        </p>
+
+        <div class="form-group">
+          <label for="loginUsuario">Usuário</label>
+          <input
+            type="text"
+            id="loginUsuario"
+            placeholder="Digite o usuário"
+            autocomplete="username"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="loginSenha">Senha</label>
+          <input
+            type="password"
+            id="loginSenha"
+            placeholder="Digite a senha"
+            autocomplete="current-password"
+          />
+        </div>
+
+        <div class="login-error" id="loginError"></div>
+
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="btnEntrar">
+            <i class="fas fa-sign-in-alt"></i> Entrar
+          </button>
+          <button class="btn btn-secondary" id="btnCancelarLogin">
+            <i class="fas fa-times"></i> Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <header>
+      <div class="container">
+        <div class="header-top">
+          <div class="header-content">
+            <div>
+              <h1><i class="fas fa-ticket-alt"></i> Ação entre Amigos</h1>
+              <p class="subtitle">Controle de vendas integrado ao Sheet.best</p>
+            </div>
+            <div class="user-controls">
+              <div class="role-selector">
+                <button class="role-btn active" id="btnVendedor">
+                  Vendedor
+                </button>
+                <button class="role-btn" id="btnModerador">Moderador</button>
+              </div>
+              <div id="userIndicator">Modo: Vendedor</div>
+              <button
+                class="btn btn-secondary btn-sm"
+                id="btnLogout"
+                style="display: none"
+              >
+                <i class="fas fa-sign-out-alt"></i> Sair
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rifa-info">
+          <div class="info-cards">
+            <div class="info-card">
+              <div class="info-icon" style="background: #4caf50">
+                <i class="fas fa-money-bill-wave"></i>
+              </div>
+              <div class="info-content">
+                <h3>Valor</h3>
+                <p class="info-value">R$ 20,00</p>
+                <p class="info-desc">cada número</p>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="info-icon" style="background: #2196f3">
+                <i class="fas fa-gift"></i>
+              </div>
+              <div class="info-content">
+                <h3>Sorteios</h3>
+                <p class="info-value">3 Prêmios</p>
+                <p class="info-desc">para cada número</p>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="info-icon" style="background: #ff9800">
+                <i class="fas fa-trophy"></i>
+              </div>
+              <div class="info-content">
+                <h3>Prêmios</h3>
+                <p class="info-value">R$ 3.000,00</p>
+                <p class="info-desc">total em premiação</p>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="info-icon" style="background: #9c27b0">
+                <i class="fas fa-calendar-alt"></i>
+              </div>
+              <div class="info-content">
+                <h3>Data do Sorteio</h3>
+                <p class="info-value">01/03</p>
+                <p class="info-desc">às 21h - Seja pontual!</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="premios-detalhes">
+            <h3>
+              <i class="fas fa-award"></i> Cada número dá direito a participar
+              dos 3 sorteios:
+            </h3>
+            <div class="premios-lista">
+              <div class="premio-item">
+                <span class="premio-posicao">1º</span>
+                <span class="premio-valor">R$ 1.500,00</span>
+              </div>
+              <div class="premio-item">
+                <span class="premio-posicao">2º</span>
+                <span class="premio-valor">R$ 1.000,00</span>
+              </div>
+              <div class="premio-item">
+                <span class="premio-posicao">3º</span>
+                <span class="premio-valor">R$ 500,00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="status-info">
+        <div class="status-item">
+          <div class="status-color disponivel"></div>
+          <span>Disponível</span>
+        </div>
+        <div class="status-item">
+          <div class="status-color reservado"></div>
+          <span>Reservado</span>
+        </div>
+        <div class="status-item">
+          <div class="status-color vendido"></div>
+          <span>Vendido</span>
+        </div>
+        <div class="status-item">
+          <div class="status-color cancelado"></div>
+          <span>Cancelado</span>
+        </div>
+      </div>
+
+      <div id="statusConexao" class="status-conexao desconectado hidden">
+        <i class="fas fa-plug"></i> Desconectado do Sheet.best
+      </div>
+
+      <div class="filters">
+        <div class="search-box">
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="Buscar por número, nome..."
+          />
+        </div>
+        <div class="filter-buttons">
+          <button class="filter-btn active" data-filter="todos">Todos</button>
+          <button class="filter-btn" data-filter="disponivel">
+            Disponíveis
+          </button>
+          <button class="filter-btn" data-filter="reservado">Reservados</button>
+          <button class="filter-btn" data-filter="vendido">Vendidos</button>
+          <button class="filter-btn" data-filter="cancelado">Cancelados</button>
+        </div>
+      </div>
+
+      <div class="resumo-vendas">
+        <div class="resumo-card">
+          <h3>Disponíveis</h3>
+          <div class="resumo-valor disponivel" id="disponivelCount">300</div>
+          <p>Livres para venda</p>
+        </div>
+        <div class="resumo-card">
+          <h3>Reservados</h3>
+          <div class="resumo-valor reservado" id="reservadoCount">0</div>
+          <p>Aguardando pagamento</p>
+        </div>
+        <div class="resumo-card">
+          <h3>Vendidos</h3>
+          <div class="resumo-valor vendido" id="vendidoCount">0</div>
+          <p>Pagamento confirmado</p>
+        </div>
+        <div class="resumo-card">
+          <h3>Cancelados</h3>
+          <div class="resumo-valor cancelado" id="canceladoCount">0</div>
+          <p>Reservas canceladas</p>
+        </div>
+      </div>
+
+      <!-- Painel de seleção múltipla -->
+      <div id="painelSelecaoMultipla" class="selecao-multipla hidden">
+        <h4><i class="fas fa-check-circle"></i> Números Selecionados</h4>
+        <div id="numerosSelecionadosLista" class="numeros-selecionados"></div>
+        <button
+          class="btn btn-warning btn-sm"
+          id="btnLimparSelecao"
+          style="margin-top: 10px; padding: 8px 12px; font-size: 0.8rem"
+        >
+          <i class="fas fa-times"></i> Limpar Seleção
+        </button>
+      </div>
+
+      <div id="rifaGrid" class="rifa-grid"></div>
+
+      <div class="painel-controle">
+        <h2 class="painel-title" id="painelTitulo">Painel do Vendedor</h2>
+
+        <div id="vendedorPanel">
+          <div class="form-group">
+            <label for="numeroSelecionado">Número(s) Selecionado(s)</label>
+            <input
+              type="text"
+              id="numeroSelecionado"
+              readonly
+              placeholder="Selecione um ou mais números"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="nomeComprador">Nome do Comprador *</label>
+            <input
+              type="text"
+              id="nomeComprador"
+              placeholder="Digite o nome do comprador"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="nomeVendedor">Nome do Vendedor *</label>
+            <input type="text" id="nomeVendedor" placeholder="Seu nome" />
+          </div>
+
+          <div class="botoes-acao">
+            <button class="btn btn-primary" id="btnReservar">
+              <i class="fas fa-clock"></i> Reservar Número(s)
+            </button>
+            <button class="btn btn-warning" id="btnLimpar">
+              <i class="fas fa-eraser"></i> Limpar Campos
+            </button>
+          </div>
+        </div>
+
+        <div id="moderadorPanel" class="hidden">
+          <div class="form-group">
+            <label for="modNumero">Número</label>
+            <input type="text" id="modNumero" readonly />
+          </div>
+
+          <div class="form-group">
+            <label for="modComprador">Nome do Comprador</label>
+            <input type="text" id="modComprador" />
+          </div>
+
+          <div class="form-group">
+            <label for="modVendedor">Nome do Vendedor</label>
+            <input type="text" id="modVendedor" />
+          </div>
+
+          <div class="form-group">
+            <label for="modStatus">Status</label>
+            <select id="modStatus">
+              <option value="Disponível">Disponível</option>
+              <option value="Reservado">Reservado</option>
+              <option value="Vendido">Vendido</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="modPagamento">Pagamento</label>
+            <select id="modPagamento">
+              <option value="Não">Não</option>
+              <option value="Sim">Sim</option>
+            </select>
+          </div>
+
+          <div class="botoes-acao">
+            <button class="btn btn-success" id="btnConfirmarPagamento">
+              <i class="fas fa-check-circle"></i> Confirmar Pagamento
+            </button>
+            <button class="btn btn-secondary" id="btnCancelarReserva">
+              <i class="fas fa-ban"></i> Cancelar Reserva
+            </button>
+          </div>
+
+          <div
+            class="info-ajuda"
+            style="
+              margin-top: 20px;
+              padding: 10px;
+              background: #e8f5e9;
+              border-radius: 5px;
+              border-left: 4px solid #4caf50;
+            "
+          >
+            <p style="margin: 0; font-size: 0.9rem; color: #2e7d32">
+              <i class="fas fa-info-circle"></i> <strong>Como funciona:</strong
+              ><br />
+              • <strong>Confirmar Pagamento</strong>: Muda status para
+              "Vendido"<br />
+              • <strong>Cancelar Reserva</strong>: Muda status para
+              "Cancelado"<br />
+              • Qualquer alteração salva automaticamente
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
