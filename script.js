@@ -282,9 +282,26 @@ async function loadDataFromSheet() {
 function processSheetData(data) {
   rifaData = [];
 
-  data.forEach((row) => {
+  // 1. Primeiro, ordenar por Data (mais recente primeiro)
+  const dadosOrdenados = [...data].sort((a, b) => {
+    const dataA = a["Data"] || "0";
+    const dataB = b["Data"] || "0";
+    // Converter para timestamp para ordenação correta
+    const timestampA = converterDataParaTimestamp(dataA);
+    const timestampB = converterDataParaTimestamp(dataB);
+    return timestampB - timestampA; // Decrescente (mais recente primeiro)
+  });
+
+  // 2. Criar um mapa para armazenar apenas o ÚLTIMO registro de cada número
+  const numerosVistos = new Set();
+
+  dadosOrdenados.forEach((row) => {
     const numero = parseInt(row["Número"] || row["número"] || 0);
-    if (numero > 0 && numero <= 360) {
+
+    // Se o número é válido e ainda não foi processado
+    if (numero > 0 && numero <= 360 && !numerosVistos.has(numero)) {
+      numerosVistos.add(numero);
+
       rifaData.push({
         numero: numero,
         status: row["Status"] || row["status"] || "Disponível",
@@ -298,7 +315,7 @@ function processSheetData(data) {
     }
   });
 
-  // Completar números faltantes
+  // 3. Completar números faltantes
   for (let i = 1; i <= 360; i++) {
     if (!rifaData.find((item) => item.numero === i)) {
       rifaData.push({
@@ -314,12 +331,16 @@ function processSheetData(data) {
     }
   }
 
-  // Ordenar
+  // 4. Ordenar por número
   rifaData.sort((a, b) => a.numero - b.numero);
 
-  // Log para debug - verificar números cancelados
-  const cancelados = rifaData.filter((item) => item.status === "Cancelado");
-  console.log(`📊 Números cancelados encontrados: ${cancelados.length}`);
+  console.log(
+    `📊 Dados carregados: ${rifaData.length} números (apenas últimos registros)`,
+  );
+
+  // DEBUG: Verificar o número 1
+  const numero1 = rifaData.find((item) => item.numero === 1);
+  console.log("🔍 Número 1 (último registro):", numero1);
 
   updateCounters();
   generateRifaGrid();
@@ -343,6 +364,39 @@ function initRifaData() {
 
   updateCounters();
   generateRifaGrid();
+}
+
+// Função auxiliar para converter data brasileira para timestamp
+function converterDataParaTimestamp(dataStr) {
+  if (!dataStr) return 0;
+
+  try {
+    // Formato: DD/MM/YYYY
+    const partes = dataStr.split("/");
+    if (partes.length === 3) {
+      const dia = parseInt(partes[0]);
+      const mes = parseInt(partes[1]) - 1; // Meses em JS são 0-indexed
+      const ano = parseInt(partes[2]);
+
+      // Se ano tem 2 dígitos, assumir século 20 ou 21
+      const anoCompleto =
+        ano < 100 ? (ano < 50 ? 2000 + ano : 1900 + ano) : ano;
+
+      return new Date(anoCompleto, mes, dia).getTime();
+    }
+
+    // Tentar converter como timestamp direto
+    const num = parseInt(dataStr);
+    if (!isNaN(num) && num > 10000) {
+      return num;
+    }
+
+    // Tentar parse direto
+    return new Date(dataStr).getTime();
+  } catch (error) {
+    console.warn(`⚠️ Erro ao converter data: ${dataStr}`, error);
+    return 0;
+  }
 }
 
 // ============ FUNÇÕES DA INTERFACE ============
