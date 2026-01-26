@@ -260,6 +260,28 @@ async function loadDataFromSheet() {
     const data = await response.json();
 
     if (data && Array.isArray(data)) {
+      console.log("📥 Total de linhas na planilha:", data.length);
+
+      // Log para verificar os dados
+      if (data.length > 0) {
+        console.log("📝 Primeira linha:", data[0]);
+        console.log("📝 Última linha:", data[data.length - 1]);
+
+        // Verificar alguns números específicos
+        const numerosParaVerificar = [78, 48, 124, 227]; // Números que deveriam estar Vendidos
+        numerosParaVerificar.forEach((num) => {
+          const registrosNum = data.filter(
+            (row) => parseInt(row["Número"] || 0) === num,
+          );
+          console.log(`🔍 Número ${num}: ${registrosNum.length} registros`);
+          registrosNum.forEach((reg, idx) => {
+            console.log(
+              `   Registro ${idx + 1}: Status=${reg["Status"]}, Pagamento=${reg["Pagamento"]}`,
+            );
+          });
+        });
+      }
+
       processSheetData(data);
       updateConnectionStatus(true);
       showNotification("Dados carregados com sucesso!", "success");
@@ -282,27 +304,17 @@ async function loadDataFromSheet() {
 function processSheetData(data) {
   rifaData = [];
 
-  // 1. Primeiro, ordenar por Data (mais recente primeiro)
-  const dadosOrdenados = [...data].sort((a, b) => {
-    const dataA = a["Data"] || "0";
-    const dataB = b["Data"] || "0";
-    // Converter para timestamp para ordenação correta
-    const timestampA = converterDataParaTimestamp(dataA);
-    const timestampB = converterDataParaTimestamp(dataB);
-    return timestampB - timestampA; // Decrescente (mais recente primeiro)
-  });
+  // 1. Criar um mapa para o ÚLTIMO registro de cada número
+  const ultimosRegistros = new Map();
 
-  // 2. Criar um mapa para armazenar apenas o ÚLTIMO registro de cada número
-  const numerosVistos = new Set();
-
-  dadosOrdenados.forEach((row) => {
+  // Percorrer do FINAL para o INÍCIO (últimas linhas primeiro)
+  for (let i = data.length - 1; i >= 0; i--) {
+    const row = data[i];
     const numero = parseInt(row["Número"] || row["número"] || 0);
 
-    // Se o número é válido e ainda não foi processado
-    if (numero > 0 && numero <= 360 && !numerosVistos.has(numero)) {
-      numerosVistos.add(numero);
-
-      rifaData.push({
+    // Se o número é válido e ainda não foi registrado
+    if (numero > 0 && numero <= 360 && !ultimosRegistros.has(numero)) {
+      ultimosRegistros.set(numero, {
         numero: numero,
         status: row["Status"] || row["status"] || "Disponível",
         comprador: row["Nome do Comprador"] || row["Comprador"] || "",
@@ -313,7 +325,10 @@ function processSheetData(data) {
         autorizadoPor: row["Nome do moderador"] || "",
       });
     }
-  });
+  }
+
+  // 2. Converter mapa para array
+  rifaData = Array.from(ultimosRegistros.values());
 
   // 3. Completar números faltantes
   for (let i = 1; i <= 360; i++) {
@@ -334,13 +349,23 @@ function processSheetData(data) {
   // 4. Ordenar por número
   rifaData.sort((a, b) => a.numero - b.numero);
 
-  console.log(
-    `📊 Dados carregados: ${rifaData.length} números (apenas últimos registros)`,
-  );
+  console.log(`📊 Dados carregados: ${rifaData.length} números`);
 
-  // DEBUG: Verificar o número 1
-  const numero1 = rifaData.find((item) => item.numero === 1);
-  console.log("🔍 Número 1 (último registro):", numero1);
+  // VERIFICAÇÃO: Contar status
+  const vendidos = rifaData.filter((item) => item.status === "Vendido").length;
+  const reservados = rifaData.filter(
+    (item) => item.status === "Reservado",
+  ).length;
+  const cancelados = rifaData.filter(
+    (item) => item.status === "Cancelado",
+  ).length;
+  const disponiveis = rifaData.filter(
+    (item) => item.status === "Disponível",
+  ).length;
+
+  console.log(
+    `📈 Status: ${vendidos} Vendidos, ${reservados} Reservados, ${cancelados} Cancelados, ${disponiveis} Disponíveis`,
+  );
 
   updateCounters();
   generateRifaGrid();
