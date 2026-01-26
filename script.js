@@ -55,9 +55,21 @@ function atualizarCamposAoSelecionar() {
     const item = rifaData.find((item) => item.numero === numero);
 
     if (item) {
-      // Preencher campos básicos (para reserva)
-      document.getElementById("nomeComprador").value = item.comprador || "";
-      document.getElementById("nomeVendedor").value = item.vendedor || "";
+      // Se for número cancelado, limpa os campos para nova reserva
+      if (item.status === "Cancelado") {
+        document.getElementById("nomeComprador").value = "";
+        document.getElementById("nomeVendedor").value = "";
+
+        // Mostra mensagem informativa
+        showNotification(
+          "Número cancelado selecionado. Você pode reservá-lo novamente!",
+          "info",
+        );
+      } else {
+        // Para outros status, preenche com dados existentes
+        document.getElementById("nomeComprador").value = item.comprador || "";
+        document.getElementById("nomeVendedor").value = item.vendedor || "";
+      }
 
       // Atualizar display para moderador
       if (userRole === "moderador") {
@@ -89,6 +101,19 @@ function atualizarCamposAoSelecionar() {
       }
     }
   } else if (selectedNumbers.length > 1) {
+    // Verificar se há números cancelados na seleção múltipla
+    const temCancelados = selectedNumbers.some((numero) => {
+      const item = rifaData.find((item) => item.numero === numero);
+      return item && item.status === "Cancelado";
+    });
+
+    if (temCancelados) {
+      showNotification(
+        "Inclui números cancelados. Eles serão reativados automaticamente!",
+        "info",
+      );
+    }
+
     // Se múltiplos números, limpar campos
     document.getElementById("nomeComprador").value = "";
     document.getElementById("nomeVendedor").value = "";
@@ -291,6 +316,10 @@ function processSheetData(data) {
 
   // Ordenar
   rifaData.sort((a, b) => a.numero - b.numero);
+
+  // Log para debug - verificar números cancelados
+  const cancelados = rifaData.filter((item) => item.status === "Cancelado");
+  console.log(`📊 Números cancelados encontrados: ${cancelados.length}`);
 
   updateCounters();
   generateRifaGrid();
@@ -501,6 +530,7 @@ function generateRifaGrid() {
     // Evento de clique
     div.addEventListener("click", function () {
       if (userRole === "vendedor") {
+        // VENDEDOR pode selecionar Disponível ou Cancelado
         if (item.status === "Disponível" || item.status === "Cancelado") {
           toggleSelectNumber(item.numero);
         } else {
@@ -670,7 +700,6 @@ async function reserveNumbers() {
     return;
   }
 
-  // Resto da função continua igual...
   // Ativar bloqueio de processamento
   isProcessing = true;
 
@@ -686,12 +715,12 @@ async function reserveNumbers() {
       selectedNumbers.map(async (numero) => {
         const item = rifaData.find((item) => item.numero === numero);
 
-        // Se for número cancelado, reativa primeiro
+        // Se for número cancelado, reativa primeiro limpando os dados antigos
         if (item && item.status === "Cancelado") {
           const dadosReativacao = {
             status: "Disponível",
-            comprador: "",
-            vendedor: "",
+            comprador: "", // LIMPA o comprador antigo
+            vendedor: "", // LIMPA o vendedor antigo
             pagamento: "Não",
             dataRegistro: new Date().toLocaleDateString("pt-BR"),
             observacoes: `Número reativado por ${userRole === "moderador" ? usuarioLogado?.nome || "Moderador" : vendedor} em ${new Date().toLocaleString("pt-BR")}`,
@@ -700,9 +729,20 @@ async function reserveNumbers() {
                 ? usuarioLogado?.nome || "Moderador"
                 : "",
           };
+
+          // Salva a reativação
           await saveToSheet(numero, dadosReativacao, true);
+
+          // Atualiza localmente
+          item.status = "Disponível";
+          item.comprador = "";
+          item.vendedor = "";
+          item.pagamento = "Não";
+          item.observacoes = dadosReativacao.observacoes;
+          item.autorizadoPor = dadosReativacao.autorizadoPor;
         }
 
+        // Dados para nova reserva
         const dados = {
           numero: numero,
           status: "Reservado",
@@ -715,7 +755,7 @@ async function reserveNumbers() {
             userRole === "moderador" ? usuarioLogado?.nome || "Moderador" : "",
         };
 
-        // Salva na planilha
+        // Salva a nova reserva
         const salvo = await saveToSheet(dados.numero, dados, true);
 
         if (salvo) {
@@ -764,6 +804,23 @@ async function reserveNumbers() {
     btnReservar.innerHTML = originalText;
     btnReservar.disabled = false;
   }
+}
+
+// Função para limpar dados de números cancelados quando forem reativados
+function limparDadosCancelados(numero) {
+  const item = rifaData.find((item) => item.numero === numero);
+  if (item && item.status === "Cancelado") {
+    // Limpa os dados antigos para que o novo comprador possa reservar
+    item.comprador = "";
+    item.vendedor = "";
+    item.observacoes = `Número cancelado foi reativado em ${new Date().toLocaleString("pt-BR")}`;
+
+    console.log(
+      `🔄 Número ${numero} cancelado - dados limpos para nova reserva`,
+    );
+    return true;
+  }
+  return false;
 }
 
 // ============ ADICIONE ESTA FUNÇÃO PARA LIMPAR CORRETAMENTE ============
