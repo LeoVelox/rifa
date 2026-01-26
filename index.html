@@ -236,7 +236,8 @@
       <div class="painel-controle">
         <h2 class="painel-title" id="painelTitulo">Painel do Vendedor</h2>
 
-        <div id="vendedorPanel">
+        <!-- PAINEL PRINCIPAL (visível para ambos) -->
+        <div id="painelPrincipal">
           <div class="form-group">
             <label for="numeroSelecionado">Número(s) Selecionado(s)</label>
             <input
@@ -261,59 +262,26 @@
             <input type="text" id="nomeVendedor" placeholder="Seu nome" />
           </div>
 
-          <div class="botoes-acao">
-            <button class="btn btn-primary" id="btnReservar">
-              <i class="fas fa-clock"></i> Reservar Número(s)
-            </button>
-            <button class="btn btn-warning" id="btnLimpar">
-              <i class="fas fa-eraser"></i> Limpar Campos
-            </button>
-          </div>
-        </div>
-
-        <div id="moderadorPanel" class="hidden">
-          <div class="form-group">
-            <label for="modNumero">Número</label>
-            <input type="text" id="modNumero" readonly />
-          </div>
-
-          <div class="form-group">
-            <label for="modComprador">Nome do Comprador</label>
-            <input type="text" id="modComprador" />
-          </div>
-
-          <div class="form-group">
-            <label for="modVendedor">Nome do Vendedor</label>
-            <input type="text" id="modVendedor" />
-          </div>
-
-          <div id="secaoModerador" class="hidden">
+          <!-- SEÇÃO DE STATUS (APENAS para moderador) -->
+          <div id="secaoStatusModerador" class="hidden">
             <div class="form-group">
-              <label for="modStatus">Status Atual</label>
-              <select id="modStatus">
-                <option value="Disponível">Disponível</option>
-                <option value="Reservado">Reservado</option>
-                <option value="Vendido">Vendido</option>
-                <option value="Cancelado">Cancelado</option>
-              </select>
+              <label>Status Atual:</label>
+              <div class="status-display" id="displayStatus">Disponível</div>
             </div>
 
             <div class="form-group">
-              <label for="modPagamento">Pagamento</label>
-              <select id="modPagamento">
-                <option value="Não">Não</option>
-                <option value="Sim">Sim</option>
-              </select>
+              <label>Pagamento:</label>
+              <div class="status-display" id="displayPagamento">Não</div>
             </div>
           </div>
 
           <div class="botoes-acao">
-            <!-- BOTÃO PRINCIPAL (para ambos) -->
+            <!-- BOTÃO PARA RESERVAR (ambos) -->
             <button class="btn btn-primary" id="btnReservar">
-              <i class="fas fa-save"></i> Salvar / Reservar
+              <i class="fas fa-save"></i> Reservar Número(s)
             </button>
 
-            <!-- BOTÕES EXTRAS PARA MODERADOR -->
+            <!-- BOTÕES DO MODERADOR (só aparecem no modo moderador) -->
             <button class="btn btn-success hidden" id="btnConfirmarPagamento">
               <i class="fas fa-check-circle"></i> Confirmar Pagamento
             </button>
@@ -322,12 +290,14 @@
             </button>
 
             <button class="btn btn-warning" id="btnLimpar">
-              <i class="fas fa-eraser"></i> Limpar
+              <i class="fas fa-eraser"></i> Limpar Campos
             </button>
           </div>
 
+          <!-- INFO PARA MODERADOR -->
           <div
-            class="info-ajuda"
+            id="infoModerador"
+            class="hidden"
             style="
               margin-top: 20px;
               padding: 10px;
@@ -337,13 +307,12 @@
             "
           >
             <p style="margin: 0; font-size: 0.9rem; color: #2e7d32">
-              <i class="fas fa-info-circle"></i> <strong>Como funciona:</strong
-              ><br />
+              <i class="fas fa-info-circle"></i>
+              <strong>Ações do Moderador:</strong><br />
+              • <strong>Reservar</strong>: Funciona igual ao vendedor<br />
               • <strong>Confirmar Pagamento</strong>: Muda status para
               "Vendido"<br />
-              • <strong>Cancelar Reserva</strong>: Muda status para
-              "Cancelado"<br />
-              • Qualquer alteração salva automaticamente
+              • <strong>Cancelar Reserva</strong>: Muda status para "Cancelado"
             </p>
           </div>
         </div>

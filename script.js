@@ -23,6 +23,95 @@ const usuariosAutorizados = [
   { usuario: "maria", senha: "inez333", nome: "Maria Inez" },
 ];
 
+// ============ FUNÇÕES DE CONTROLE DE INTERFACE ============
+
+// Atualizar interface baseada no papel do usuário
+function atualizarInterfacePorPapel() {
+  const titulo = document.getElementById("painelTitulo");
+  const secaoStatus = document.getElementById("secaoStatusModerador");
+  const btnConfirmar = document.getElementById("btnConfirmarPagamento");
+  const btnCancelar = document.getElementById("btnCancelarReserva");
+  const infoModerador = document.getElementById("infoModerador");
+
+  if (userRole === "moderador") {
+    titulo.textContent = "Painel do Moderador";
+    if (secaoStatus) secaoStatus.classList.remove("hidden");
+    if (btnConfirmar) btnConfirmar.classList.remove("hidden");
+    if (btnCancelar) btnCancelar.classList.remove("hidden");
+    if (infoModerador) infoModerador.classList.remove("hidden");
+  } else {
+    titulo.textContent = "Painel do Vendedor";
+    if (secaoStatus) secaoStatus.classList.add("hidden");
+    if (btnConfirmar) btnConfirmar.classList.add("hidden");
+    if (btnCancelar) btnCancelar.classList.add("hidden");
+    if (infoModerador) infoModerador.classList.add("hidden");
+  }
+}
+
+// Atualizar campos quando número for selecionado
+function atualizarCamposAoSelecionar() {
+  if (selectedNumbers.length === 1) {
+    const numero = selectedNumbers[0];
+    const item = rifaData.find((item) => item.numero === numero);
+
+    if (item) {
+      // Preencher campos básicos (para reserva)
+      document.getElementById("nomeComprador").value = item.comprador || "";
+      document.getElementById("nomeVendedor").value = item.vendedor || "";
+
+      // Atualizar display para moderador
+      if (userRole === "moderador") {
+        document.getElementById("displayStatus").textContent = item.status;
+        document.getElementById("displayPagamento").textContent =
+          item.pagamento;
+
+        // Habilitar/desabilitar botões do moderador
+        const btnConfirmar = document.getElementById("btnConfirmarPagamento");
+        const btnCancelar = document.getElementById("btnCancelarReserva");
+
+        if (btnConfirmar) {
+          btnConfirmar.disabled = !(
+            item.status === "Reservado" && item.pagamento === "Não"
+          );
+          btnConfirmar.title =
+            item.status === "Reservado"
+              ? "Confirmar pagamento deste número"
+              : "Apenas números reservados podem ter pagamento confirmado";
+        }
+
+        if (btnCancelar) {
+          btnCancelar.disabled = item.status === "Cancelado";
+          btnCancelar.title =
+            item.status === "Cancelado"
+              ? "Número já cancelado"
+              : "Cancelar reserva deste número";
+        }
+      }
+    }
+  } else if (selectedNumbers.length > 1) {
+    // Se múltiplos números, limpar campos
+    document.getElementById("nomeComprador").value = "";
+    document.getElementById("nomeVendedor").value = "";
+
+    // Desabilitar botões do moderador para múltipla seleção
+    if (userRole === "moderador") {
+      const btnConfirmar = document.getElementById("btnConfirmarPagamento");
+      const btnCancelar = document.getElementById("btnCancelarReserva");
+
+      if (btnConfirmar) {
+        btnConfirmar.disabled = true;
+        btnConfirmar.title =
+          "Selecione apenas um número para confirmar pagamento";
+      }
+
+      if (btnCancelar) {
+        btnCancelar.disabled = true;
+        btnCancelar.title = "Selecione apenas um número para cancelar";
+      }
+    }
+  }
+}
+
 // ============ SHEET.BEST - FUNÇÕES ============
 
 // ENCONTRAR ID DA LINHA PELO NÚMERO
@@ -421,53 +510,8 @@ function generateRifaGrid() {
           );
         }
       } else {
-        // MODERADOR - usa a mesma função de toggle
+        // MODERADOR pode selecionar QUALQUER número
         toggleSelectNumber(item.numero);
-
-        // Além disso, preenche os campos do moderador se for apenas um número
-        if (selectedNumbers.length === 1) {
-          const item = rifaData.find(
-            (item) => item.numero === selectedNumbers[0],
-          );
-          if (item) {
-            // Preenche campos básicos
-            document.getElementById("nomeComprador").value =
-              item.comprador || "";
-            document.getElementById("nomeVendedor").value = item.vendedor || "";
-
-            // Preenche campos específicos do moderador
-            document.getElementById("modStatus").value = item.status;
-            document.getElementById("modPagamento").value = item.pagamento;
-
-            // Atualiza botões do moderador
-            const btnConfirmar = document.getElementById(
-              "btnConfirmarPagamento",
-            );
-            const btnCancelar = document.getElementById("btnCancelarReserva");
-
-            if (item.status === "Reservado" && item.pagamento === "Não") {
-              btnConfirmar.disabled = false;
-              btnConfirmar.title = "Confirmar pagamento";
-            } else {
-              btnConfirmar.disabled = true;
-              btnConfirmar.title =
-                item.status === "Vendido"
-                  ? "Pagamento já confirmado"
-                  : "Apenas números reservados";
-            }
-
-            if (item.status === "Cancelado") {
-              btnCancelar.disabled = true;
-              btnCancelar.title = "Número já cancelado";
-            } else if (item.status === "Vendido" && item.pagamento === "Sim") {
-              btnCancelar.disabled = true;
-              btnCancelar.title = "Não pode cancelar venda confirmada";
-            } else {
-              btnCancelar.disabled = false;
-              btnCancelar.title = "Cancelar reserva";
-            }
-          }
-        }
       }
     });
 
@@ -506,6 +550,7 @@ function toggleSelectNumber(numero) {
 
   updateSelecaoMultiplaPanel();
   generateRifaGrid();
+  atualizarCamposAoSelecionar();
 }
 
 // Selecionar um único número (para moderador)
@@ -563,10 +608,10 @@ function clearSelection() {
   document.getElementById("nomeComprador").value = "";
   document.getElementById("nomeVendedor").value = "";
 
-  // Limpar campos do moderador se estiver no modo moderador
+  // Limpar display do moderador
   if (userRole === "moderador") {
-    document.getElementById("modStatus").value = "Disponível";
-    document.getElementById("modPagamento").value = "Não";
+    document.getElementById("displayStatus").textContent = "Disponível";
+    document.getElementById("displayPagamento").textContent = "Não";
 
     // Desabilitar botões do moderador
     const btnConfirmar = document.getElementById("btnConfirmarPagamento");
@@ -719,6 +764,14 @@ async function reserveNumbers() {
     btnReservar.innerHTML = originalText;
     btnReservar.disabled = false;
   }
+}
+
+// ============ ADICIONE ESTA FUNÇÃO PARA LIMPAR CORRETAMENTE ============
+
+function limparCamposReserva() {
+  document.getElementById("nomeComprador").value = "";
+  document.getElementById("nomeVendedor").value = "";
+  clearSelection();
 }
 
 // FUNÇÃO ESPECÍFICA PARA REATIVAR NÚMERO CANCELADO
@@ -932,8 +985,8 @@ function toggleUserRole(role) {
     .getElementById("btnModerador")
     .classList.toggle("active", role === "moderador");
 
-  // Atualizar interface do moderador
-  atualizarInterfaceModerador();
+  // Atualizar interface
+  atualizarInterfacePorPapel();
 
   // Limpar seleção
   clearSelection();
@@ -1042,6 +1095,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   // Iniciar como vendedor
   initRifaData();
   updateLoginUI();
+  atualizarInterfacePorPapel();
 
   // Event Listeners para login/logout
   document
@@ -1053,6 +1107,12 @@ document.addEventListener("DOMContentLoaded", async function () {
   document
     .getElementById("btnLogout")
     .addEventListener("click", logoutModerator);
+  document
+    .getElementById("btnReservar")
+    .addEventListener("click", reserveNumbers);
+  document
+    .getElementById("btnLimpar")
+    .addEventListener("click", limparCamposReserva);
 
   // Permitir login com Enter
   document
@@ -1095,22 +1155,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // Vendedor
   document
-    .getElementById("btnReservar")
-    .addEventListener("click", reserveNumbers);
-  document
     .getElementById("btnLimpar")
     .addEventListener("click", clearSelection);
   document
     .getElementById("btnLimparSelecao")
     .addEventListener("click", clearSelection);
-
-  // Moderador
-  document
-    .getElementById("btnConfirmarPagamento")
-    .addEventListener("click", confirmarPagamento);
-  document
-    .getElementById("btnCancelarReserva")
-    .addEventListener("click", cancelarReserva);
 
   // Filtros
   document.querySelectorAll(".filter-btn").forEach((btn) => {
