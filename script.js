@@ -522,18 +522,18 @@ async function reserveNumbers() {
     return;
   }
 
-  // Verificar se todos os números selecionados estão disponíveis
+  // Verificar se todos os números selecionados estão disponíveis OU cancelados
   const numerosIndisponiveis = [];
   selectedNumbers.forEach((numero) => {
     const item = rifaData.find((item) => item.numero === numero);
-    if (item && item.status !== "Disponível") {
+    if (item && item.status !== "Disponível" && item.status !== "Cancelado") {
       numerosIndisponiveis.push(numero);
     }
   });
 
   if (numerosIndisponiveis.length > 0) {
     alert(
-      `Os seguintes números não estão disponíveis: ${numerosIndisponiveis.join(", ")}`,
+      `Os seguintes números não podem ser reservados: ${numerosIndisponiveis.join(", ")}`,
     );
     return;
   }
@@ -565,9 +565,27 @@ async function reserveNumbers() {
 
   try {
     const results = await Promise.all(
-      dadosParaSalvar.map(async (dados) => {
+      selectedNumbers.map(async (numero) => {
+        const item = rifaData.find((item) => item.numero === numero);
+
+        // SE for número cancelado, reativa primeiro
+        if (item && item.status === "Cancelado") {
+          await reativarNumeroCancelado(numero);
+        }
+
+        const dados = {
+          numero: numero,
+          status: "Reservado",
+          comprador: comprador,
+          vendedor: vendedor,
+          pagamento: "Não",
+          dataRegistro: new Date().toLocaleDateString("pt-BR"),
+          observacoes: `Reservado por ${vendedor} em ${new Date().toLocaleString("pt-BR")}`,
+          autorizadoPor: "",
+        };
+
         // PRIMEIRO salva na planilha
-        const salvo = await saveToSheet(dados.numero, dados, true); // skipDuplicationCheck = true
+        const salvo = await saveToSheet(dados.numero, dados, true);
 
         // SE salvou na planilha, ENTÃO atualiza localmente
         if (salvo) {
@@ -618,6 +636,36 @@ async function reserveNumbers() {
     btnReservar.innerHTML = originalText;
     btnReservar.disabled = false;
   }
+}
+
+// FUNÇÃO ESPECÍFICA PARA REATIVAR NÚMERO CANCELADO
+async function reativarNumeroCancelado(numero) {
+  const item = rifaData.find((item) => item.numero === numero);
+  if (!item) return false;
+
+  // Se o número está cancelado, reativa como disponível
+  if (item.status === "Cancelado") {
+    const dadosReativacao = {
+      status: "Disponível",
+      comprador: "", // Limpa o comprador
+      vendedor: "", // Limpa o vendedor
+      pagamento: "Não",
+      dataRegistro: new Date().toLocaleDateString("pt-BR"),
+      observacoes: `Número reativado por sistema em ${new Date().toLocaleString("pt-BR")}`,
+      autorizadoPor: "Sistema",
+    };
+
+    const salvo = await saveToSheet(numero, dadosReativacao, true);
+    if (salvo) {
+      item.status = "Disponível";
+      item.comprador = "";
+      item.vendedor = "";
+      item.observacoes = dadosReativacao.observacoes;
+      return true;
+    }
+    return false;
+  }
+  return false;
 }
 
 // MODERADOR: Confirmar pagamento
