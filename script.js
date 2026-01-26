@@ -411,17 +411,26 @@ function generateRifaGrid() {
     // Evento de clique
     div.addEventListener("click", function () {
       if (userRole === "vendedor") {
-        if (item.status === "Disponível") {
+        if (item.status === "Disponível" || item.status === "Cancelado") {
           toggleSelectNumber(item.numero);
         } else {
           showNotification(
-            "Apenas números disponíveis podem ser selecionados",
+            "Apenas números disponíveis ou cancelados podem ser selecionados",
             "warning",
           );
         }
       } else {
-        clearSelection();
-        selectSingleNumber(item.numero);
+        // MODERADOR pode selecionar QUALQUER número
+        if (selectedNumbers.includes(item.numero)) {
+          // Se já está selecionado, remove
+          const index = selectedNumbers.indexOf(item.numero);
+          selectedNumbers.splice(index, 1);
+        } else {
+          // Se não está, adiciona
+          selectedNumbers.push(item.numero);
+        }
+        updateSelecaoMultiplaPanel();
+        generateRifaGrid();
       }
     });
 
@@ -450,6 +459,7 @@ function selectSingleNumber(numero) {
 
   const item = rifaData.find((item) => item.numero === numero);
   if (item && userRole === "moderador") {
+    // Preencher os campos do moderador
     document.getElementById("modNumero").value = numero;
     document.getElementById("modComprador").value = item.comprador;
     document.getElementById("modVendedor").value = item.vendedor;
@@ -460,17 +470,25 @@ function selectSingleNumber(numero) {
     const btnConfirmar = document.getElementById("btnConfirmarPagamento");
     const btnCancelar = document.getElementById("btnCancelarReserva");
 
-    if (item.status === "Vendido" && item.pagamento === "Sim") {
-      btnConfirmar.disabled = true;
-      btnConfirmar.title = "Pagamento já confirmado";
-    } else {
+    // Só pode confirmar pagamento se estiver Reservado
+    if (item.status === "Reservado" && item.pagamento === "Não") {
       btnConfirmar.disabled = false;
       btnConfirmar.title = "Confirmar pagamento";
+    } else {
+      btnConfirmar.disabled = true;
+      btnConfirmar.title =
+        item.status === "Vendido"
+          ? "Pagamento já confirmado"
+          : "Apenas números reservados";
     }
 
+    // Só pode cancelar se não estiver já cancelado ou vendido confirmado
     if (item.status === "Cancelado") {
       btnCancelar.disabled = true;
       btnCancelar.title = "Número já cancelado";
+    } else if (item.status === "Vendido" && item.pagamento === "Sim") {
+      btnCancelar.disabled = true;
+      btnCancelar.title = "Não pode cancelar venda confirmada";
     } else {
       btnCancelar.disabled = false;
       btnCancelar.title = "Cancelar reserva";
@@ -522,12 +540,21 @@ async function reserveNumbers() {
     return;
   }
 
-  // Verificar se todos os números selecionados estão disponíveis OU cancelados
+  // Verificar se os números estão disponíveis (regras diferentes por usuário)
   const numerosIndisponiveis = [];
   selectedNumbers.forEach((numero) => {
     const item = rifaData.find((item) => item.numero === numero);
-    if (item && item.status !== "Disponível" && item.status !== "Cancelado") {
-      numerosIndisponiveis.push(numero);
+
+    if (userRole === "vendedor") {
+      // VENDEDOR só pode reservar Disponível ou Cancelado
+      if (item && item.status !== "Disponível" && item.status !== "Cancelado") {
+        numerosIndisponiveis.push(numero);
+      }
+    } else {
+      // MODERADOR pode reservar qualquer número EXCETO Vendido confirmado
+      if (item && item.status === "Vendido" && item.pagamento === "Sim") {
+        numerosIndisponiveis.push(numero);
+      }
     }
   });
 
@@ -538,6 +565,7 @@ async function reserveNumbers() {
     return;
   }
 
+  // Resto da função continua igual...
   // Ativar bloqueio de processamento
   isProcessing = true;
 
@@ -548,29 +576,26 @@ async function reserveNumbers() {
     '<i class="fas fa-spinner fa-spin"></i> Processando...';
   btnReservar.disabled = true;
 
-  // ARMAZENAR OS DADOS ANTES DE MODIFICAR
-  const dadosParaSalvar = selectedNumbers.map((numero) => {
-    const item = rifaData.find((item) => item.numero === numero);
-    return {
-      numero: numero,
-      status: "Reservado",
-      comprador: comprador,
-      vendedor: vendedor,
-      pagamento: "Não",
-      dataRegistro: new Date().toLocaleDateString("pt-BR"),
-      observacoes: `Reservado por ${vendedor} em ${new Date().toLocaleString("pt-BR")}`,
-      autorizadoPor: "",
-    };
-  });
-
   try {
     const results = await Promise.all(
       selectedNumbers.map(async (numero) => {
         const item = rifaData.find((item) => item.numero === numero);
 
-        // SE for número cancelado, reativa primeiro
+        // Se for número cancelado, reativa primeiro
         if (item && item.status === "Cancelado") {
-          await reativarNumeroCancelado(numero);
+          const dadosReativacao = {
+            status: "Disponível",
+            comprador: "",
+            vendedor: "",
+            pagamento: "Não",
+            dataRegistro: new Date().toLocaleDateString("pt-BR"),
+            observacoes: `Número reativado por ${userRole === "moderador" ? usuarioLogado?.nome || "Moderador" : vendedor} em ${new Date().toLocaleString("pt-BR")}`,
+            autorizadoPor:
+              userRole === "moderador"
+                ? usuarioLogado?.nome || "Moderador"
+                : "",
+          };
+          await saveToSheet(numero, dadosReativacao, true);
         }
 
         const dados = {
@@ -580,15 +605,16 @@ async function reserveNumbers() {
           vendedor: vendedor,
           pagamento: "Não",
           dataRegistro: new Date().toLocaleDateString("pt-BR"),
-          observacoes: `Reservado por ${vendedor} em ${new Date().toLocaleString("pt-BR")}`,
-          autorizadoPor: "",
+          observacoes: `Reservado por ${vendedor} (${userRole}) em ${new Date().toLocaleString("pt-BR")}`,
+          autorizadoPor:
+            userRole === "moderador" ? usuarioLogado?.nome || "Moderador" : "",
         };
 
-        // PRIMEIRO salva na planilha
+        // Salva na planilha
         const salvo = await saveToSheet(dados.numero, dados, true);
 
-        // SE salvou na planilha, ENTÃO atualiza localmente
         if (salvo) {
+          // Atualiza localmente
           const item = rifaData.find((item) => item.numero === dados.numero);
           if (item) {
             item.status = dados.status;
@@ -601,14 +627,11 @@ async function reserveNumbers() {
           }
         }
 
-        return { numero: dados.numero, success: salvo };
+        return { numero: numero, success: salvo };
       }),
     );
 
     const successCount = results.filter((r) => r.success === true).length;
-    const failedNumbers = results
-      .filter((r) => !r.success)
-      .map((r) => r.numero);
 
     if (successCount === selectedNumbers.length) {
       showNotification(
@@ -617,7 +640,7 @@ async function reserveNumbers() {
       );
     } else if (successCount > 0) {
       showNotification(
-        `${successCount} de ${selectedNumbers.length} número(s) reservado(s) com sucesso. Falha nos números: ${failedNumbers.join(", ")}`,
+        `${successCount} de ${selectedNumbers.length} número(s) reservado(s) com sucesso`,
         "warning",
       );
     } else {
@@ -849,13 +872,15 @@ function toggleUserRole(role) {
     .getElementById("btnModerador")
     .classList.toggle("active", role === "moderador");
 
-  // Atualizar painéis
-  document
-    .getElementById("vendedorPanel")
-    .classList.toggle("hidden", role !== "vendedor");
+  // SEMPRE mostrar painel do vendedor
+  document.getElementById("vendedorPanel").classList.remove("hidden");
+
+  // Painel do moderador só para moderador
   document
     .getElementById("moderadorPanel")
     .classList.toggle("hidden", role !== "moderador");
+
+  // Atualizar título
   document.getElementById("painelTitulo").textContent =
     role === "vendedor" ? "Painel do Vendedor" : "Painel do Moderador";
 
