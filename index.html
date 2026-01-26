@@ -287,30 +287,42 @@
             <input type="text" id="modVendedor" />
           </div>
 
-          <div class="form-group">
-            <label for="modStatus">Status</label>
-            <select id="modStatus">
-              <option value="Disponível">Disponível</option>
-              <option value="Reservado">Reservado</option>
-              <option value="Vendido">Vendido</option>
-              <option value="Cancelado">Cancelado</option>
-            </select>
-          </div>
+          <div id="secaoModerador" class="hidden">
+            <div class="form-group">
+              <label for="modStatus">Status Atual</label>
+              <select id="modStatus">
+                <option value="Disponível">Disponível</option>
+                <option value="Reservado">Reservado</option>
+                <option value="Vendido">Vendido</option>
+                <option value="Cancelado">Cancelado</option>
+              </select>
+            </div>
 
-          <div class="form-group">
-            <label for="modPagamento">Pagamento</label>
-            <select id="modPagamento">
-              <option value="Não">Não</option>
-              <option value="Sim">Sim</option>
-            </select>
+            <div class="form-group">
+              <label for="modPagamento">Pagamento</label>
+              <select id="modPagamento">
+                <option value="Não">Não</option>
+                <option value="Sim">Sim</option>
+              </select>
+            </div>
           </div>
 
           <div class="botoes-acao">
-            <button class="btn btn-success" id="btnConfirmarPagamento">
+            <!-- BOTÃO PRINCIPAL (para ambos) -->
+            <button class="btn btn-primary" id="btnReservar">
+              <i class="fas fa-save"></i> Salvar / Reservar
+            </button>
+
+            <!-- BOTÕES EXTRAS PARA MODERADOR -->
+            <button class="btn btn-success hidden" id="btnConfirmarPagamento">
               <i class="fas fa-check-circle"></i> Confirmar Pagamento
             </button>
-            <button class="btn btn-secondary" id="btnCancelarReserva">
+            <button class="btn btn-danger hidden" id="btnCancelarReserva">
               <i class="fas fa-ban"></i> Cancelar Reserva
+            </button>
+
+            <button class="btn btn-warning" id="btnLimpar">
+              <i class="fas fa-eraser"></i> Limpar
             </button>
           </div>
 

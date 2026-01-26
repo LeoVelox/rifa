@@ -249,6 +249,7 @@ function updateConnectionStatus(connected, message = "") {
 function updateSelecaoMultiplaPanel() {
   const painel = document.getElementById("painelSelecaoMultipla");
   const lista = document.getElementById("numerosSelecionadosLista");
+  const campoNumeros = document.getElementById("numeroSelecionado");
 
   if (selectedNumbers.length > 0) {
     painel.classList.remove("hidden");
@@ -261,11 +262,11 @@ function updateSelecaoMultiplaPanel() {
       lista.appendChild(span);
     });
 
-    document.getElementById("numeroSelecionado").value =
-      selectedNumbers.join(", ");
+    // ATUALIZAR O CAMPO DE NÚMEROS EM AMBOS OS MODOS
+    campoNumeros.value = selectedNumbers.join(", ");
   } else {
     painel.classList.add("hidden");
-    document.getElementById("numeroSelecionado").value = "";
+    campoNumeros.value = "";
   }
 }
 
@@ -420,22 +421,77 @@ function generateRifaGrid() {
           );
         }
       } else {
-        // MODERADOR pode selecionar QUALQUER número
-        if (selectedNumbers.includes(item.numero)) {
-          // Se já está selecionado, remove
-          const index = selectedNumbers.indexOf(item.numero);
-          selectedNumbers.splice(index, 1);
-        } else {
-          // Se não está, adiciona
-          selectedNumbers.push(item.numero);
+        // MODERADOR - usa a mesma função de toggle
+        toggleSelectNumber(item.numero);
+
+        // Além disso, preenche os campos do moderador se for apenas um número
+        if (selectedNumbers.length === 1) {
+          const item = rifaData.find(
+            (item) => item.numero === selectedNumbers[0],
+          );
+          if (item) {
+            // Preenche campos básicos
+            document.getElementById("nomeComprador").value =
+              item.comprador || "";
+            document.getElementById("nomeVendedor").value = item.vendedor || "";
+
+            // Preenche campos específicos do moderador
+            document.getElementById("modStatus").value = item.status;
+            document.getElementById("modPagamento").value = item.pagamento;
+
+            // Atualiza botões do moderador
+            const btnConfirmar = document.getElementById(
+              "btnConfirmarPagamento",
+            );
+            const btnCancelar = document.getElementById("btnCancelarReserva");
+
+            if (item.status === "Reservado" && item.pagamento === "Não") {
+              btnConfirmar.disabled = false;
+              btnConfirmar.title = "Confirmar pagamento";
+            } else {
+              btnConfirmar.disabled = true;
+              btnConfirmar.title =
+                item.status === "Vendido"
+                  ? "Pagamento já confirmado"
+                  : "Apenas números reservados";
+            }
+
+            if (item.status === "Cancelado") {
+              btnCancelar.disabled = true;
+              btnCancelar.title = "Número já cancelado";
+            } else if (item.status === "Vendido" && item.pagamento === "Sim") {
+              btnCancelar.disabled = true;
+              btnCancelar.title = "Não pode cancelar venda confirmada";
+            } else {
+              btnCancelar.disabled = false;
+              btnCancelar.title = "Cancelar reserva";
+            }
+          }
         }
-        updateSelecaoMultiplaPanel();
-        generateRifaGrid();
       }
     });
 
     grid.appendChild(div);
   });
+}
+
+// Função para mostrar/ocultar elementos do moderador
+function atualizarInterfaceModerador() {
+  const secaoModerador = document.getElementById("secaoModerador");
+  const btnConfirmar = document.getElementById("btnConfirmarPagamento");
+  const btnCancelar = document.getElementById("btnCancelarReserva");
+
+  if (userRole === "moderador") {
+    if (secaoModerador) secaoModerador.classList.remove("hidden");
+    if (btnConfirmar) btnConfirmar.classList.remove("hidden");
+    if (btnCancelar) btnCancelar.classList.remove("hidden");
+    document.getElementById("painelTitulo").textContent = "Painel do Moderador";
+  } else {
+    if (secaoModerador) secaoModerador.classList.add("hidden");
+    if (btnConfirmar) btnConfirmar.classList.add("hidden");
+    if (btnCancelar) btnCancelar.classList.add("hidden");
+    document.getElementById("painelTitulo").textContent = "Painel do Vendedor";
+  }
 }
 
 // Selecionar/deselecionar número (para múltipla seleção)
@@ -503,16 +559,20 @@ function clearSelection() {
   selectedNumbers = [];
   updateSelecaoMultiplaPanel();
 
-  if (userRole === "vendedor") {
-    document.getElementById("numeroSelecionado").value = "";
-    document.getElementById("nomeComprador").value = "";
-    document.getElementById("nomeVendedor").value = "";
-  } else {
-    document.getElementById("modNumero").value = "";
-    document.getElementById("modComprador").value = "";
-    document.getElementById("modVendedor").value = "";
+  // Limpar campos básicos
+  document.getElementById("nomeComprador").value = "";
+  document.getElementById("nomeVendedor").value = "";
+
+  // Limpar campos do moderador se estiver no modo moderador
+  if (userRole === "moderador") {
     document.getElementById("modStatus").value = "Disponível";
     document.getElementById("modPagamento").value = "Não";
+
+    // Desabilitar botões do moderador
+    const btnConfirmar = document.getElementById("btnConfirmarPagamento");
+    const btnCancelar = document.getElementById("btnCancelarReserva");
+    if (btnConfirmar) btnConfirmar.disabled = true;
+    if (btnCancelar) btnCancelar.disabled = true;
   }
 
   generateRifaGrid();
@@ -872,18 +932,10 @@ function toggleUserRole(role) {
     .getElementById("btnModerador")
     .classList.toggle("active", role === "moderador");
 
-  // SEMPRE mostrar painel do vendedor
-  document.getElementById("vendedorPanel").classList.remove("hidden");
+  // Atualizar interface do moderador
+  atualizarInterfaceModerador();
 
-  // Painel do moderador só para moderador
-  document
-    .getElementById("moderadorPanel")
-    .classList.toggle("hidden", role !== "moderador");
-
-  // Atualizar título
-  document.getElementById("painelTitulo").textContent =
-    role === "vendedor" ? "Painel do Vendedor" : "Painel do Moderador";
-
+  // Limpar seleção
   clearSelection();
 }
 
