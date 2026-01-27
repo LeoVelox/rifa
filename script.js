@@ -141,23 +141,8 @@ function atualizarCamposAoSelecionar() {
 // ENCONTRAR ID DA LINHA PELO NÚMERO
 async function findRowIdByNumber(numero) {
   try {
-    const response = await fetch(SHEETDB_URL);
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data && Array.isArray(data)) {
-        // SheetDB retorna objetos com propriedades
-        for (const row of data) {
-          const rowNumber = parseInt(row["Número"] || row["número"] || 0);
-
-          if (rowNumber === numero) {
-            // SheetDB não usa IDs visíveis, então retornamos o número para busca
-            return rowNumber.toString();
-          }
-        }
-      }
-    }
-    return null;
+    // SheetDB usa o próprio número como identificador
+    return numero.toString();
   } catch (error) {
     console.log("Busca por número falhou:", error);
     return null;
@@ -168,11 +153,9 @@ async function findRowIdByNumber(numero) {
 async function saveToSheet(numero, data, skipDuplicationCheck = false) {
   console.log(`💾 Salvando número ${numero}...`);
 
-  // SÓ fazer verificação de duplicidade se solicitado
   if (!skipDuplicationCheck) {
     const existingItem = rifaData.find((item) => item.numero === numero);
 
-    // Verificação mais completa - não apenas status e pagamento
     if (
       existingItem &&
       existingItem.status === data.status &&
@@ -184,8 +167,7 @@ async function saveToSheet(numero, data, skipDuplicationCheck = false) {
       console.log(
         `⚠️ Número ${numero} já está atualizado localmente. Ignorando...`,
       );
-      // Mas ainda tenta salvar na planilha para garantir sincronização
-      // return true; // NÃO RETORNAR AQUI - sempre tenta salvar na planilha
+      return true;
     }
   }
 
@@ -201,65 +183,119 @@ async function saveToSheet(numero, data, skipDuplicationCheck = false) {
       Observações: data.observacoes || "",
     };
 
-    // SHEETDB: Primeiro verificar se o número já existe
+    // SHEETDB: Verificar se já existe registro com este número
     const checkUrl = `${SHEETDB_URL}/search?Número=${numero}`;
     const checkResponse = await fetch(checkUrl);
 
     let isUpdate = false;
-    let rowId = null;
 
     if (checkResponse.ok) {
       const existingData = await checkResponse.json();
-      if (existingData && existingData.length > 0) {
-        // Existe registro com este número
-        isUpdate = true;
-        // SheetDB não usa IDs numéricos como Sheet.best
-        // Vamos usar o campo "Número" como identificador
-        rowId = existingData[0]["Número"];
-      }
+      isUpdate = existingData && existingData.length > 0;
     }
 
-    if (isUpdate && rowId) {
-      // ATUALIZAR linha existente no SheetDB
-      // SheetDB usa método PATCH para atualizar
-      const updateUrl = `${SHEETDB_URL}/Número/${rowId}`;
+    if (isUpdate) {
+      // ATUALIZAR no SheetDB - usar PUT com filtro
+      const updateUrl = `${SHEETDB_URL}/Número/${numero}`;
 
       const response = await fetch(updateUrl, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sheetData),
+        method: "PUT", // SheetDB usa PUT para atualizar
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ data: sheetData }),
       });
 
       if (response.ok) {
         console.log("✅ Linha atualizada no SheetDB");
         return true;
       } else {
-        console.warn(`⚠️ Não foi possível atualizar, tentando criar nova...`);
-        isUpdate = false; // Força criar nova
+        console.warn(`⚠️ PUT falhou, tentando DELETE + POST...`);
+        // Tentar alternativa: deletar e criar novo
+        return await saveWithDeleteAndCreate(numero, sheetData);
       }
-    }
-
-    // CRIAR nova linha (se não encontrou ou não conseguiu atualizar)
-    const response = await fetch(SHEETDB_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sheetData),
-    });
-
-    if (response.ok) {
-      console.log("✅ Nova linha criada no SheetDB");
-      return true;
     } else {
-      const errorText = await response.text();
-      throw new Error(`Erro ${response.status}: ${errorText}`);
+      // CRIAR nova linha
+      const response = await fetch(SHEETDB_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(sheetData),
+      });
+
+      if (response.ok) {
+        console.log("✅ Nova linha criada no SheetDB");
+        return true;
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Erro ${response.status}: ${errorText}`);
+      }
     }
   } catch (error) {
     console.error("❌ Erro ao salvar no SheetDB:", error);
     showNotification(
-      `Erro ao salvar número ${numero}: ${error.message}`,
+      `Erro ao salvar número ${numero}. Verifique conexão.`,
       "error",
     );
     return false;
+  }
+}
+
+async function saveWithDeleteAndCreate(numero, sheetData) {
+  try {
+    // Primeiro deletar se existir
+    const deleteUrl = `${SHEETDB_URL}/Número/${numero}`;
+    await fetch(deleteUrl, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+
+    // Aguardar um pouco
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Criar novo
+    const response = await fetch(SHEETDB_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(sheetData),
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("Erro no fallback:", error);
+    return false;
+  }
+}
+
+// Funções auxiliares:
+async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  const response = await fetch(resource, {
+    ...options,
+    signal: controller.signal,
+  });
+
+  clearTimeout(id);
+  return response;
+}
+
+async function retryOperation(operation, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      console.log(`Tentativa ${i + 1} falhou, tentando novamente...`);
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
+    }
   }
 }
 
@@ -267,8 +303,7 @@ async function saveToSheet(numero, data, skipDuplicationCheck = false) {
 
 async function loadDataFromSheet() {
   try {
-    // MUDAR a URL para SHEETDB_URL
-    const response = await fetch(SHEETDB_URL);
+    const response = await fetchWithTimeout(SHEETDB_URL, {}, 15000);
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -276,21 +311,25 @@ async function loadDataFromSheet() {
 
     const data = await response.json();
 
-    // O resto da função permanece IGUAL
     if (data && Array.isArray(data)) {
-      console.log("📥 Total de linhas na planilha:", data.length);
-      // ... (código permanece igual) ...
+      console.log("📥 Total de linhas no SheetDB:", data.length);
+
+      // Log para debug
+      if (data.length > 0) {
+        console.log("Primeira linha:", data[0]);
+      }
+
       processSheetData(data);
       updateConnectionStatus(true);
       showNotification("Dados carregados com sucesso!", "success");
       return true;
     } else {
       initRifaData();
-      updateConnectionStatus(true);
+      updateConnectionStatus(false, "Planilha vazia");
       return true;
     }
   } catch (error) {
-    console.error("❌ Erro ao carregar:", error);
+    console.error("❌ Erro ao carregar do SheetDB:", error);
     initRifaData();
     updateConnectionStatus(false, "Usando dados locais");
     showNotification("Sem conexão. Usando dados locais...", "warning");
@@ -302,17 +341,18 @@ async function loadDataFromSheet() {
 function processSheetData(data) {
   rifaData = [];
 
-  // 1. Criar um mapa para o ÚLTIMO registro de cada número
-  const ultimosRegistros = new Map();
+  // SheetDB pode ter duplicatas - pegar o ÚLTIMO registro de cada número
+  const numerosProcessados = new Set();
 
   // Percorrer do FINAL para o INÍCIO (últimas linhas primeiro)
   for (let i = data.length - 1; i >= 0; i--) {
     const row = data[i];
     const numero = parseInt(row["Número"] || row["número"] || 0);
 
-    // Se o número é válido e ainda não foi registrado
-    if (numero > 0 && numero <= 360 && !ultimosRegistros.has(numero)) {
-      ultimosRegistros.set(numero, {
+    if (numero > 0 && numero <= 360 && !numerosProcessados.has(numero)) {
+      numerosProcessados.add(numero);
+
+      rifaData.push({
         numero: numero,
         status: row["Status"] || row["status"] || "Disponível",
         comprador: row["Nome do Comprador"] || row["Comprador"] || "",
@@ -325,10 +365,7 @@ function processSheetData(data) {
     }
   }
 
-  // 2. Converter mapa para array
-  rifaData = Array.from(ultimosRegistros.values());
-
-  // 3. Completar números faltantes
+  // Completar números faltantes
   for (let i = 1; i <= 360; i++) {
     if (!rifaData.find((item) => item.numero === i)) {
       rifaData.push({
@@ -344,27 +381,10 @@ function processSheetData(data) {
     }
   }
 
-  // 4. Ordenar por número
+  // Ordenar por número
   rifaData.sort((a, b) => a.numero - b.numero);
 
-  console.log(`📊 Dados carregados: ${rifaData.length} números`);
-
-  // VERIFICAÇÃO: Contar status
-  const vendidos = rifaData.filter((item) => item.status === "Vendido").length;
-  const reservados = rifaData.filter(
-    (item) => item.status === "Reservado",
-  ).length;
-  const cancelados = rifaData.filter(
-    (item) => item.status === "Cancelado",
-  ).length;
-  const disponiveis = rifaData.filter(
-    (item) => item.status === "Disponível",
-  ).length;
-
-  console.log(
-    `📈 Status: ${vendidos} Vendidos, ${reservados} Reservados, ${cancelados} Cancelados, ${disponiveis} Disponíveis`,
-  );
-
+  console.log(`📊 Dados processados: ${rifaData.length} números`);
   updateCounters();
   generateRifaGrid();
 }
@@ -991,8 +1011,10 @@ async function confirmarPagamento() {
   };
 
   try {
-    // PRIMEIRO salva na planilha
-    const salvo = await saveToSheet(numero, dadosParaSalvar, true);
+    // Usar retry para operação crítica
+    const salvo = await retryOperation(async () => {
+      return await saveToSheet(numero, dadosParaSalvar, true);
+    }, 2);
 
     if (salvo) {
       // DEPOIS atualiza localmente
@@ -1004,15 +1026,18 @@ async function confirmarPagamento() {
       showNotification(`Pagamento confirmado para número ${numero}`, "success");
       updateCounters();
       generateRifaGrid();
-
-      // Limpar seleção após sucesso
       clearSelection();
+    } else {
+      showNotification(
+        "Falha ao confirmar pagamento. Tente novamente.",
+        "error",
+      );
     }
   } catch (error) {
     console.error("Erro ao confirmar pagamento:", error);
-    showNotification("Erro ao processar pagamento", "error");
+    showNotification("Erro de conexão ao processar pagamento", "error");
   } finally {
-    // Sempre liberar o bloqueio, mesmo se houver erro
+    // SEMPRE liberar o bloqueio
     isProcessing = false;
     btnConfirmar.innerHTML = originalText;
     btnConfirmar.disabled = false;
@@ -1222,6 +1247,53 @@ async function forceSaveToSheet(numero) {
 
 // Adicionar ao console para testes
 window.forceSave = forceSaveToSheet;
+
+// NO FINAL do arquivo, ANTES do DOMContentLoaded:
+window.addEventListener("error", function (event) {
+  console.error("Erro global:", event.error);
+  isProcessing = false; // Libera processamento em caso de erro
+
+  const btnConfirmar = document.getElementById("btnConfirmarPagamento");
+  const btnCancelar = document.getElementById("btnCancelarReserva");
+  const btnReservar = document.getElementById("btnReservar");
+
+  if (btnConfirmar) {
+    btnConfirmar.disabled = false;
+    btnConfirmar.innerHTML =
+      '<i class="fas fa-check-circle"></i> Confirmar Pagamento';
+  }
+
+  if (btnCancelar) {
+    btnCancelar.disabled = false;
+    btnCancelar.innerHTML =
+      '<i class="fas fa-times-circle"></i> Cancelar Reserva';
+  }
+
+  if (btnReservar) {
+    btnReservar.disabled = false;
+    btnReservar.innerHTML = '<i class="fas fa-save"></i> Reservar Número(s)';
+  }
+});
+
+// Também adicionar no DOMContentLoaded:
+document.addEventListener("DOMContentLoaded", async function () {
+  // Código existente...
+
+  // Adicionar timeout para operações longas
+  const originalFetch = window.fetch;
+  window.fetch = function (...args) {
+    const [resource, config] = args;
+    const timeout = config?.timeout || 15000;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    return originalFetch(resource, {
+      ...config,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+  };
+});
 
 // ============ INICIALIZAÇÃO ============
 
