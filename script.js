@@ -1,6 +1,5 @@
 // ============ CONFIGURAÇÃO DO SHEET.BEST ============
-const SHEETBEST_URL =
-  "https://api.sheetbest.com/sheets/e8992b96-6649-4752-b909-87a60b00213b";
+const SHEETDB_URL = "https://sheetdb.io/api/v1/zi1b49enxxdsw";
 
 // ============ VARIÁVEIS DO SISTEMA ============
 let rifaData = [];
@@ -142,17 +141,18 @@ function atualizarCamposAoSelecionar() {
 // ENCONTRAR ID DA LINHA PELO NÚMERO
 async function findRowIdByNumber(numero) {
   try {
-    const response = await fetch(SHEETBEST_URL);
+    const response = await fetch(SHEETDB_URL);
 
     if (response.ok) {
       const data = await response.json();
       if (data && Array.isArray(data)) {
-        for (let i = 0; i < data.length; i++) {
-          const row = data[i];
+        // SheetDB retorna objetos com propriedades
+        for (const row of data) {
           const rowNumber = parseInt(row["Número"] || row["número"] || 0);
 
           if (rowNumber === numero) {
-            return row.id || `row${i + 2}`;
+            // SheetDB não usa IDs visíveis, então retornamos o número para busca
+            return rowNumber.toString();
           }
         }
       }
@@ -201,44 +201,60 @@ async function saveToSheet(numero, data, skipDuplicationCheck = false) {
       Observações: data.observacoes || "",
     };
 
-    const rowId = await findRowIdByNumber(numero);
+    // SHEETDB: Primeiro verificar se o número já existe
+    const checkUrl = `${SHEETDB_URL}/search?Número=${numero}`;
+    const checkResponse = await fetch(checkUrl);
 
-    if (rowId) {
-      // ATUALIZAR linha existente
-      const updateUrl = `${SHEETBEST_URL}/${rowId}`;
+    let isUpdate = false;
+    let rowId = null;
+
+    if (checkResponse.ok) {
+      const existingData = await checkResponse.json();
+      if (existingData && existingData.length > 0) {
+        // Existe registro com este número
+        isUpdate = true;
+        // SheetDB não usa IDs numéricos como Sheet.best
+        // Vamos usar o campo "Número" como identificador
+        rowId = existingData[0]["Número"];
+      }
+    }
+
+    if (isUpdate && rowId) {
+      // ATUALIZAR linha existente no SheetDB
+      // SheetDB usa método PATCH para atualizar
+      const updateUrl = `${SHEETDB_URL}/Número/${rowId}`;
 
       const response = await fetch(updateUrl, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sheetData),
       });
 
       if (response.ok) {
-        console.log("✅ Linha atualizada na planilha");
+        console.log("✅ Linha atualizada no SheetDB");
         return true;
       } else {
-        console.warn(
-          `⚠️ Não foi possível atualizar linha ${rowId}, tentando criar nova...`,
-        );
+        console.warn(`⚠️ Não foi possível atualizar, tentando criar nova...`);
+        isUpdate = false; // Força criar nova
       }
     }
 
     // CRIAR nova linha (se não encontrou ou não conseguiu atualizar)
-    const response = await fetch(SHEETBEST_URL, {
+    const response = await fetch(SHEETDB_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(sheetData),
     });
 
     if (response.ok) {
-      console.log("✅ Nova linha criada na planilha");
+      console.log("✅ Nova linha criada no SheetDB");
       return true;
     } else {
       const errorText = await response.text();
       throw new Error(`Erro ${response.status}: ${errorText}`);
     }
   } catch (error) {
-    console.error("❌ Erro ao salvar na planilha:", error);
+    console.error("❌ Erro ao salvar no SheetDB:", error);
     showNotification(
       `Erro ao salvar número ${numero}: ${error.message}`,
       "error",
@@ -251,7 +267,8 @@ async function saveToSheet(numero, data, skipDuplicationCheck = false) {
 
 async function loadDataFromSheet() {
   try {
-    const response = await fetch(SHEETBEST_URL);
+    // MUDAR a URL para SHEETDB_URL
+    const response = await fetch(SHEETDB_URL);
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -259,29 +276,10 @@ async function loadDataFromSheet() {
 
     const data = await response.json();
 
+    // O resto da função permanece IGUAL
     if (data && Array.isArray(data)) {
       console.log("📥 Total de linhas na planilha:", data.length);
-
-      // Log para verificar os dados
-      if (data.length > 0) {
-        console.log("📝 Primeira linha:", data[0]);
-        console.log("📝 Última linha:", data[data.length - 1]);
-
-        // Verificar alguns números específicos
-        const numerosParaVerificar = [78, 48, 124, 227]; // Números que deveriam estar Vendidos
-        numerosParaVerificar.forEach((num) => {
-          const registrosNum = data.filter(
-            (row) => parseInt(row["Número"] || 0) === num,
-          );
-          console.log(`🔍 Número ${num}: ${registrosNum.length} registros`);
-          registrosNum.forEach((reg, idx) => {
-            console.log(
-              `   Registro ${idx + 1}: Status=${reg["Status"]}, Pagamento=${reg["Pagamento"]}`,
-            );
-          });
-        });
-      }
-
+      // ... (código permanece igual) ...
       processSheetData(data);
       updateConnectionStatus(true);
       showNotification("Dados carregados com sucesso!", "success");
@@ -433,7 +431,7 @@ function updateConnectionStatus(connected, message = "") {
 
   if (connected) {
     statusElement.className = "status-conexao conectado";
-    statusElement.innerHTML = `<i class="fas fa-plug"></i> Conectado ao Sheet.best`;
+    statusElement.innerHTML = `<i class="fas fa-plug"></i> Conectado ao SheetDB`; // MUDAR AQUI
     statusElement.classList.remove("hidden");
   } else {
     statusElement.className = "status-conexao desconectado";
