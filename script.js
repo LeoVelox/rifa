@@ -267,32 +267,46 @@ async function retryOperation(operation, maxRetries = 3) {
 
 async function loadDataFromSheet() {
   try {
-    console.log("🔄 Carregando dados...");
+    console.log("🔄 Iniciando carregamento de dados...");
+    console.log("📡 URL:", `${GAS_URL}?sheet=VENDAS`);
 
-    // USAR UM PROXY CORS GRATUITO
-    const proxyUrl = "https://corsproxy.io/?";
-    const targetUrl = encodeURIComponent(`${GAS_URL}?sheet=VENDAS`);
+    const response = await fetch(`${GAS_URL}?sheet=VENDAS`);
 
-    const response = await fetch(proxyUrl + targetUrl, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    });
-
-    console.log("📡 Status:", response.status);
+    console.log("📊 Status da resposta:", response.status);
+    console.log("📊 OK?", response.ok);
 
     if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
+      const errorText = await response.text();
+      console.error("❌ Resposta de erro:", errorText);
+      throw new Error(`Erro HTTP: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     console.log("✅ Dados recebidos:", data);
+
+    // Verificar estrutura dos dados
+    if (Array.isArray(data)) {
+      console.log(`📈 Total de registros: ${data.length}`);
+      if (data.length > 0) {
+        console.log("📝 Primeiro registro:", data[0]);
+        console.log("🔑 Chaves do primeiro registro:", Object.keys(data[0]));
+      }
+    } else {
+      console.warn("⚠️ Dados não são um array:", data);
+    }
+
+    // Verificar se há erro na resposta
+    if (data.error) {
+      console.error("❌ Erro na resposta:", data.error);
+      throw new Error(data.error);
+    }
 
     processSheetData(data);
     updateConnectionStatus(true);
     return true;
   } catch (e) {
     console.error("💥 Erro ao carregar dados:", e);
+    console.error("📋 Stack:", e.stack);
     initRifaData();
     updateConnectionStatus(false, e.message);
     return false;
@@ -1346,49 +1360,6 @@ function debounce(func, wait) {
   };
 }
 
-// Funções de teste
-function testarConexao() {
-  console.clear();
-  console.log("🧪 TESTANDO CONEXÃO...");
-
-  // Testar GET
-  fetch(
-    "https://corsproxy.io/?" + encodeURIComponent(GAS_URL + "?sheet=VENDAS"),
-  )
-    .then((r) => {
-      console.log("✅ GET funcionou! Status:", r.status);
-      return r.json();
-    })
-    .then((data) => {
-      console.log("📊 Dados recebidos:", data.length, "registros");
-      if (data.length > 0) {
-        console.log("📝 Primeiro registro:", data[0]);
-      }
-    })
-    .catch((e) => console.error("❌ GET falhou:", e));
-
-  // Testar POST
-  const testData = {
-    sheet: "VENDAS",
-    Número: "999",
-    Status: "Teste",
-    "Nome do Comprador": "Teste CORS",
-    "Nome do Vendedor": "Sistema",
-    Pagamento: "Não",
-    Data: new Date().toLocaleDateString("pt-BR"),
-    Observações: "Teste de conexão CORS",
-  };
-
-  fetch("https://corsproxy.io/?" + encodeURIComponent(GAS_URL), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(testData),
-  })
-    .then((r) => r.json())
-    .then((data) => console.log("✅ POST funcionou:", data))
-    .catch((e) => console.error("❌ POST falhou:", e));
-}
-
 // Função para forçar salvamento (debug)
 async function forceSaveToSheet(numero) {
   const item = rifaData.find((item) => item.numero === numero);
@@ -1438,20 +1409,6 @@ document.addEventListener("DOMContentLoaded", async function () {
   initRifaData();
   updateLoginUI();
   atualizarInterfacePorPapel();
-
-  // ADICIONE ESTAS LINHAS (depois dos outros event listeners):
-  document
-    .getElementById("btnTestarConexao")
-    .addEventListener("click", testarConexao);
-
-  document
-    .getElementById("btnAtualizarTudo")
-    .addEventListener("click", async function () {
-      console.log("🔄 Atualizando tudo...");
-      await loadDataFromSheet();
-      generateRifaGrid();
-      showNotification("Sistema atualizado!", "success");
-    });
 
   // Event Listeners para login/logout
   document
