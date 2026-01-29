@@ -186,10 +186,15 @@ async function saveWithDeleteAndCreate(numero, sheetData) {
     const response = await fetch(SHEETDB_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify(sheetData),
+      body: JSON.stringify({
+        sheet: "Registro_Sorteios",
+        "Número": 12,
+        "Status": "Vendido",
+        "Nome do Comprador": "Fulano",
+        "Nome do Vendedor": "Ciclano"
+      })
     });
 
     return response.ok;
@@ -229,7 +234,7 @@ async function retryOperation(operation, maxRetries = 3) {
 
 async function loadDataFromSheet() {
   try {
-    const response = await fetch(`${SHEETDB_URL}?sheet=Vendas`);
+    const response = await fetch(`${SHEETDB_URL}?sheet=VENDAS`);
     const data = await response.json();
 
     processSheetData(data);
