@@ -152,15 +152,17 @@ async function findRowIdByNumber(numero) {
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(numero, data) {
   const payload = {
-    "Número": numero.toString(),
-    "Status": data.status,
-    "Nome do Comprador": data.comprador,
-    "Nome do Vendedor": data.vendedor,
-    "Nome do moderador": data.autorizadoPor || "",
-    "Pagamento": data.pagamento,
-    "Data": data.dataRegistro,
-    "Observações": data.observacoes || ""
-  };
+  sheet: "Vendas",
+  "Número": numero.toString(),
+  "Status": data.status,
+  "Nome do Comprador": data.comprador,
+  "Nome do Vendedor": data.vendedor,
+  "Nome do moderador": data.autorizadoPor || "",
+  "Pagamento": data.pagamento,
+  "Data": data.dataRegistro,
+  "Observações": data.observacoes || ""
+};
+
 
   const response = await fetch(SHEETDB_URL, {
     method: "POST",
@@ -175,10 +177,7 @@ async function saveWithDeleteAndCreate(numero, sheetData) {
   try {
     // Primeiro deletar se existir
     const deleteUrl = `${SHEETDB_URL}/Número/${numero}`;
-    await fetch(deleteUrl, {
-      method: "DELETE",
-      headers: { Accept: "application/json" },
-    });
+    await fetch(deleteUrl, { method: "DELETE" });
 
     // Aguardar um pouco
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -230,7 +229,7 @@ async function retryOperation(operation, maxRetries = 3) {
 
 async function loadDataFromSheet() {
   try {
-    const response = await fetch(SHEETDB_URL);
+    const response = await fetch(`${SHEETDB_URL}?sheet=Vendas`);
     const data = await response.json();
 
     processSheetData(data);
