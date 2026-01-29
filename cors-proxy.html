@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+  <head>
+    <title>CORS Proxy</title>
+  </head>
+  <body>
+    <script>
+      // Proxy para evitar CORS - use esta URL em vez da direta do Google Apps Script
+      const GAS_PROXY_URL = "SEU_GOOGLE_APPS_SCRIPT_URL"; // Substitua pela sua URL
+
+      // Função para fazer proxy de requisições
+      async function handleRequest(request) {
+        const url = new URL(request.url);
+        const targetUrl = url.searchParams.get("url") || GAS_PROXY_URL;
+
+        try {
+          // Clonar a requisição
+          const init = {
+            method: request.method,
+            headers: {},
+            body: request.method !== "GET" ? await request.text() : undefined,
+          };
+
+          // Copiar cabeçalhos (exceto origem e referer)
+          for (const [key, value] of request.headers.entries()) {
+            if (!["origin", "referer"].includes(key.toLowerCase())) {
+              init.headers[key] = value;
+            }
+          }
+
+          // Fazer a requisição para o Google Apps Script
+          const response = await fetch(targetUrl, init);
+
+          // Retornar resposta com CORS headers
+          const corsResponse = new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: {
+              ...Object.fromEntries(response.headers.entries()),
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type",
+            },
+          });
+
+          return corsResponse;
+        } catch (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+      }
+
+      // Ouvir requisições
+      self.addEventListener("fetch", (event) => {
+        if (event.request.method === "OPTIONS") {
+          // Responder a preflight requests
+          event.respondWith(
+            new Response(null, {
+              status: 204,
+              headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods":
+                  "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "86400",
+              },
+            }),
+          );
+        } else {
+          event.respondWith(handleRequest(event.request));
+        }
+      });
+
+      console.log("🚀 Proxy CORS iniciado!");
+    </script>
+  </body>
+</html>
