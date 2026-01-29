@@ -145,12 +145,19 @@ function saveToSheet(dados) {
     method: "POST",
     body: formData,
   })
-    .then((res) => res.json())
-    .then((data) => {
-      console.log("✅ Sucesso:", data);
+    .then((res) => res.text())
+    .then((text) => {
+      console.log("📩 Resposta bruta do GAS:", text);
+
+      // Limpa possíveis caracteres inválidos
+      const cleanText = text.trim().replace(/^[^\[{]*/, "");
+
+      const data = JSON.parse(cleanText);
+
+      console.log("✅ Sucesso real:", data);
     })
     .catch((err) => {
-      console.error("❌ Erro:", err);
+      console.error("❌ Erro real:", err);
     });
 }
 
