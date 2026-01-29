@@ -147,7 +147,13 @@ async function saveToSheet(dados, sheet = "VENDAS") {
 
     const res = await fetch(GAS_URL, {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ...dados,
+        sheet
+      })
     });
 
     const text = await res.text();
