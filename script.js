@@ -313,113 +313,127 @@ async function loadDataFromSheet() {
 // Processar dados da planilha
 function processSheetData(data) {
   console.log("🔍 Iniciando processSheetData...");
-  console.log("📦 Tipo de dados:", typeof data);
+  console.log("📦 Tipo de dados recebido:", typeof data);
   console.log("📦 É array?", Array.isArray(data));
 
-  if (!Array.isArray(data)) {
-    console.error("❌ ERRO: dados não são array!");
-    console.error("❌ Dados recebidos:", data);
+  if (!Array.isArray(data) || data.length === 0) {
+    console.error("❌ ERRO: Dados inválidos ou vazios!");
     return;
   }
 
   rifaData = [];
 
-  // Primeiro, coletar todos os números únicos
+  // Verificar se é array de arrays (matriz)
+  const isMatrix = Array.isArray(data[0]) && !Array.isArray(data[0][0]);
+  console.log("📊 É matriz?", isMatrix);
+
+  // PRIMEIRA LINHA SÃO OS CABEÇALHOS
+  const headers = isMatrix
+    ? data[0].map((h) => h.toString().trim())
+    : Object.keys(data[0] || {});
+  console.log("📝 Cabeçalhos:", headers);
+
+  // VERIFICAR QUAIS COLUNAS TEMOS
+  const numeroIndex = headers.findIndex(
+    (h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("número") ||
+      h.replace(/[^\w]/g, "").toLowerCase().includes("numero"),
+  );
+
+  console.log("🔢 Índice da coluna Número:", numeroIndex);
+
+  // Mapear índices das colunas importantes
+  const columnMap = {
+    numero: numeroIndex,
+    status: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("status"),
+    ),
+    comprador: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("comprador"),
+    ),
+    vendedor: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("vendedor"),
+    ),
+    pagamento: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("pagamento"),
+    ),
+    dataRegistro: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("data"),
+    ),
+    observacoes: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("observa"),
+    ),
+    autorizadoPor: headers.findIndex((h) =>
+      h.replace(/[^\w]/g, "").toLowerCase().includes("moderador"),
+    ),
+  };
+
+  console.log("🗺️ Mapa de colunas:", columnMap);
+
   const numerosMap = new Map();
 
-  console.log(`📊 Total de linhas recebidas: ${data.length}`);
+  // Determinar onde começar os dados
+  const startIndex = isMatrix ? 1 : 0; // Se for matriz, pula cabeçalhos
 
-  // Processar cada linha da planilha
-  data.forEach((row, index) => {
-    console.log(`\n📄 Processando linha ${index + 1}:`, row);
+  console.log(`📊 Total de linhas: ${data.length}`);
+  console.log(`📊 Índice inicial: ${startIndex}`);
 
-    // Verificar estrutura da linha
-    if (typeof row !== "object") {
-      console.warn(`⚠️ Linha ${index} não é objeto:`, row);
-      return;
-    }
+  for (let i = startIndex; i < data.length; i++) {
+    const row = data[i];
 
-    // Tentar diferentes nomes de coluna
+    // Pular linhas vazias
+    if (!row || row.length === 0) continue;
+
+    // Extrair número
     let numero;
 
-    // Tentar "Número" primeiro
-    if (row["Número"] !== undefined) {
-      numero = parseInt(row["Número"]);
-      console.log(`  🔢 Número de "Número": ${numero}`);
-    }
-    // Tentar "numero" (minúsculo)
-    else if (row["numero"] !== undefined) {
-      numero = parseInt(row["numero"]);
-      console.log(`  🔢 Número de "numero": ${numero}`);
-    }
-    // Tentar "NÚMERO" (maiúsculo)
-    else if (row["NÚMERO"] !== undefined) {
-      numero = parseInt(row["NÚMERO"]);
-      console.log(`  🔢 Número de "NÚMERO": ${numero}`);
-    }
-    // Tentar primeiro campo se for número
-    else {
-      const firstKey = Object.keys(row)[0];
-      const firstValue = row[firstKey];
-      numero = parseInt(firstValue);
-      console.log(
-        `  🔢 Tentando primeiro campo "${firstKey}": ${firstValue} -> ${numero}`,
-      );
-    }
-
-    console.log(`  📊 Número final: ${numero} (é número? ${!isNaN(numero)})`);
-
-    if (!isNaN(numero) && numero > 0 && numero <= 360) {
-      // Verificar se já temos este número
-      if (numerosMap.has(numero)) {
-        console.log(`  🔄 Número ${numero} já existe, sobrescrevendo...`);
+    if (isMatrix) {
+      // Matriz: usar índice
+      if (columnMap.numero >= 0 && columnMap.numero < row.length) {
+        numero = parseInt(row[columnMap.numero]);
+      } else {
+        // Fallback: primeiro campo se for número
+        const firstValue = row[0];
+        numero = parseInt(firstValue);
       }
-
-      // Mapear todos os campos possíveis
-      const registro = {
-        numero: numero,
-        status: row["Status"] || row["status"] || row["STATUS"] || "Disponível",
-        comprador:
-          row["Nome do Comprador"] ||
-          row["Comprador"] ||
-          row["nome do comprador"] ||
-          row["COMPRADOR"] ||
-          "",
-        vendedor:
-          row["Nome do Vendedor"] ||
-          row["Vendedor"] ||
-          row["nome do vendedor"] ||
-          row["VENDEDOR"] ||
-          "",
-        pagamento:
-          row["Pagamento"] || row["pagamento"] || row["PAGAMENTO"] || "Não",
-        dataRegistro: row["Data"] || row["data"] || row["DATA"] || "",
-        observacoes:
-          row["Observações"] || row["observacoes"] || row["OBSERVAÇÕES"] || "",
-        autorizadoPor:
-          row["Nome do moderador"] ||
-          row["moderador"] ||
-          row["nome do moderador"] ||
-          row["MODERADOR"] ||
-          "",
-      };
-
-      console.log(`  ✅ Registro ${numero}:`, registro);
-      numerosMap.set(numero, registro);
     } else {
-      console.warn(`  ⚠️ Ignorando número inválido: ${numero}`);
+      // Objeto: usar chaves
+      numero = parseInt(row["Número"] || row["numero"] || row["NÚMERO"] || 0);
     }
-  });
 
-  console.log(`\n🗂️ Total de números únicos encontrados: ${numerosMap.size}`);
+    // Validar número
+    if (isNaN(numero) || numero < 1 || numero > 360) {
+      console.warn(`⚠️ Linha ${i} - Número inválido: ${numero}`, row);
+      continue;
+    }
 
-  // Converter map para array
+    // Extrair outros campos
+    const registro = {
+      numero: numero,
+      status: extrairCampo(row, "status", columnMap, isMatrix) || "Disponível",
+      comprador: extrairCampo(row, "comprador", columnMap, isMatrix) || "",
+      vendedor: extrairCampo(row, "vendedor", columnMap, isMatrix) || "",
+      pagamento: extrairCampo(row, "pagamento", columnMap, isMatrix) || "Não",
+      dataRegistro:
+        extrairCampo(row, "dataRegistro", columnMap, isMatrix) || "",
+      observacoes: extrairCampo(row, "observacoes", columnMap, isMatrix) || "",
+      autorizadoPor:
+        extrairCampo(row, "autorizadoPor", columnMap, isMatrix) || "",
+    };
+
+    console.log(
+      `✅ Registro ${numero}: ${registro.status} - ${registro.comprador}`,
+    );
+    numerosMap.set(numero, registro);
+  }
+
+  console.log(`\n🗂️ Números únicos encontrados: ${numerosMap.size}`);
+
+  // Converter para array
   rifaData = Array.from(numerosMap.values());
 
-  // Completar números faltantes (1 a 360)
-  console.log(`\n🔍 Completando números de 1 a 360...`);
+  // Completar números faltantes
   let completados = 0;
-
   for (let i = 1; i <= 360; i++) {
     if (!rifaData.find((item) => item.numero === i)) {
       rifaData.push({
@@ -438,15 +452,68 @@ function processSheetData(data) {
 
   console.log(`✅ Números completados: ${completados}`);
 
-  // Ordenar por número
+  // Ordenar
   rifaData.sort((a, b) => a.numero - b.numero);
 
   console.log(`\n🎉 Processamento completo!`);
-  console.log(`📊 Total no rifaData: ${rifaData.length} números`);
-  console.log(`📋 Primeiros 3 registros:`, rifaData.slice(0, 3));
+  console.log(`📊 Total registros: ${rifaData.length}`);
+
+  // Mostrar alguns números importantes
+  const exemplos = [1, 3, 5, 100, 147, 299];
+  exemplos.forEach((num) => {
+    const item = rifaData.find((r) => r.numero === num);
+    if (item) {
+      console.log(`📋 Número ${num}: ${item.status} - ${item.comprador}`);
+    }
+  });
 
   updateCounters();
   generateRifaGrid();
+}
+
+// Função auxiliar para extrair campo
+function extrairCampo(row, campo, columnMap, isMatrix) {
+  if (isMatrix) {
+    const index = columnMap[campo];
+    if (index >= 0 && index < row.length) {
+      return row[index] ? row[index].toString() : "";
+    }
+    return "";
+  } else {
+    // Tentar várias chaves possíveis
+    const chavesPossiveis = {
+      status: ["Status", "status", "STATUS"],
+      comprador: [
+        "Nome do Comprador",
+        "Comprador",
+        "nome do comprador",
+        "COMPRADOR",
+      ],
+      vendedor: [
+        "Nome do Vendedor",
+        "Vendedor",
+        "nome do vendedor",
+        "VENDEDOR",
+      ],
+      pagamento: ["Pagamento", "pagamento", "PAGAMENTO"],
+      dataRegistro: ["Data", "data", "DATA"],
+      observacoes: ["Observações", "observacoes", "OBSERVAÇÕES"],
+      autorizadoPor: [
+        "Nome do moderador",
+        "moderador",
+        "nome do moderador",
+        "MODERADOR",
+      ],
+    };
+
+    const chaves = chavesPossiveis[campo] || [];
+    for (const chave of chaves) {
+      if (row[chave] !== undefined) {
+        return row[chave].toString();
+      }
+    }
+    return "";
+  }
 }
 
 // Inicializar dados da rifa
