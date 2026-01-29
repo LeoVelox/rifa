@@ -138,67 +138,20 @@ function atualizarCamposAoSelecionar() {
 }
 
 // SALVAR/ATUALIZAR NA PLANILHA
-async function saveToSheet(numero, data) {
-  try {
-    // Preparar dados
-    const payload = {
-      sheet: "VENDAS",
-      Número: numero.toString(),
-      Status: data.status,
-      "Nome do Comprador": data.comprador,
-      "Nome do Vendedor": data.vendedor,
-      "Nome do moderador": data.autorizadoPor || "",
-      Pagamento: data.pagamento,
-      Data: data.dataRegistro || new Date().toLocaleDateString("pt-BR"),
-      Observações: data.observacoes || "",
-    };
+function saveToSheet(dados) {
+  const formData = new URLSearchParams(dados);
 
-    console.log("📤 Enviando dados:", payload);
-
-    // USAR UM PROXY CORS GRATUITO
-    const proxyUrl = "https://corsproxy.io/?";
-    const targetUrl = encodeURIComponent(GAS_URL);
-
-    const response = await fetch(proxyUrl + targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      body: JSON.stringify(payload),
+  fetch(GAS_URL, {
+    method: "POST",
+    body: formData,
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      console.log("✅ Sucesso:", data);
+    })
+    .catch((err) => {
+      console.error("❌ Erro:", err);
     });
-
-    console.log("📡 Status da resposta:", response.status);
-
-    const result = await response.json();
-    console.log("📡 Resposta:", result);
-
-    if (!result.success) {
-      throw new Error(result.error || "Erro ao salvar");
-    }
-
-    // ATUALIZAR LOCALMENTE (IMPORTANTE!)
-    const item = rifaData.find((item) => item.numero === numero);
-    if (item) {
-      item.status = data.status;
-      item.comprador = data.comprador;
-      item.vendedor = data.vendedor;
-      item.pagamento = data.pagamento;
-      item.autorizadoPor = data.autorizadoPor || "";
-      item.dataRegistro = data.dataRegistro;
-      item.observacoes = data.observacoes || "";
-    }
-
-    // Atualizar interface
-    updateCounters();
-    generateRifaGrid();
-
-    return true;
-  } catch (error) {
-    console.error("❌ Erro ao salvar:", error);
-    showNotification(`Erro: ${error.message}`, "error");
-    return false;
-  }
 }
 
 // Funções auxiliares:
