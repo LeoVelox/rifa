@@ -146,23 +146,26 @@ function atualizarCamposAoSelecionar() {
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSupabase(dados) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/vendas`, {
-      method: "POST",
-      headers: {
-        ...SUPABASE_HEADERS,
-        Prefer: "resolution=merge-duplicates"
-      },
-      body: JSON.stringify({
-        numero: dados.numero,
-        status: dados.status,
-        nome_do_comprador: dados.comprador || "",
-        nome_do_vendedor: dados.vendedor || "",
-        nome_do_moderador: dados.autorizadoPor || "",
-        pagamento: dados.pagamento || "Não",
-        observacoes: dados.observacoes || "",
-        data_registro: new Date().toISOString()
-      })
-    });
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/vendas?on_conflict=numero`,
+      {
+        method: "POST",
+        headers: {
+          ...SUPABASE_HEADERS,
+          Prefer: "resolution=merge-duplicates"
+        },
+        body: JSON.stringify({
+          numero: dados.numero,
+          status: dados.status,
+          nome_do_comprador: dados.comprador || "",
+          nome_do_vendedor: dados.vendedor || "",
+          nome_do_moderador: dados.autorizadoPor || "",
+          pagamento: dados.pagamento || "Não",
+          observacoes: dados.observacoes || "",
+          data_registro: new Date().toISOString()
+        })
+      }
+    );
 
     if (!res.ok) {
       const err = await res.text();
@@ -175,8 +178,6 @@ async function saveToSupabase(dados) {
     return false;
   }
 }
-
-
 
 // Funções auxiliares:
 async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
