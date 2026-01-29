@@ -1,5 +1,5 @@
 // ============ CONFIGURAÇÃO DO SHEET.BEST ============
-const SHEETDB_URL = "https://script.google.com/u/0/home/projects/14Bl4k_ZzdqWPigQjBSHqJyPkgO2XxCzqqkgQh-bFAQ4_M1xzMH8PvNdf/edit?pli=10";
+const SHEETDB_URL = "https://script.google.com/macros/s/AKfycbzdiWA7IhlaU1_7GixuJcubDvzuPJvuKJB-HXdIr_JFIyUjD0-whbZfTUWND8-YYIe5lQ/exec";
 
 // ============ VARIÁVEIS DO SISTEMA ============
 let rifaData = [];
