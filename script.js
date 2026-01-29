@@ -1,5 +1,6 @@
 // ============ CONFIGURAÇÃO DO SHEET.BEST ============
-const SHEETDB_URL = "https://script.google.com/macros/s/AKfycbzdiWA7IhlaU1_7GixuJcubDvzuPJvuKJB-HXdIr_JFIyUjD0-whbZfTUWND8-YYIe5lQ/exec";
+const GAS_URL =
+  "https://script.google.com/macros/s/AKfycbzdiWA7IhlaU1_7GixuJcubDvzuPJvuKJB-HXdIr_JFIyUjD0-whbZfTUWND8-YYIe5lQ/exec";
 
 // ============ VARIÁVEIS DO SISTEMA ============
 let rifaData = [];
@@ -151,26 +152,47 @@ async function findRowIdByNumber(numero) {
 
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(numero, data) {
-  const payload = {
-  sheet: "Vendas",
-  "Número": numero.toString(),
-  "Status": data.status,
-  "Nome do Comprador": data.comprador,
-  "Nome do Vendedor": data.vendedor,
-  "Nome do moderador": data.autorizadoPor || "",
-  "Pagamento": data.pagamento,
-  "Data": data.dataRegistro,
-  "Observações": data.observacoes || ""
-};
+  try {
+    // Mapear os dados para os nomes exatos das colunas na planilha
+    // Verifique os nomes exatos das colunas na aba VENDAS
+    const payload = {
+      sheet: "VENDAS", // ou "Registro_Sorteios" dependendo da operação
+      Número: numero.toString(),
+      Status: data.status,
+      "Nome do Comprador": data.comprador,
+      "Nome do Vendedor": data.vendedor,
+      "Nome do moderador": data.autorizadoPor || "",
+      Pagamento: data.pagamento,
+      Data: data.dataRegistro,
+      Observações: data.observacoes || "",
+    };
 
+    console.log("Enviando para Google Sheets:", payload);
 
-  const response = await fetch(SHEETDB_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+    const response = await fetch(GAS_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-  return response.ok;
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || "Erro desconhecido ao salvar");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao salvar no Google Sheets:", error);
+    showNotification(`Erro ao salvar: ${error.message}`, "error");
+    return false;
+  }
 }
 
 async function saveWithDeleteAndCreate(numero, sheetData) {
@@ -186,15 +208,15 @@ async function saveWithDeleteAndCreate(numero, sheetData) {
     const response = await fetch(SHEETDB_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         sheet: "Registro_Sorteios",
-        "Número": 12,
-        "Status": "Vendido",
+        Número: 12,
+        Status: "Vendido",
         "Nome do Comprador": "Fulano",
-        "Nome do Vendedor": "Ciclano"
-      })
+        "Nome do Vendedor": "Ciclano",
+      }),
     });
 
     return response.ok;
@@ -234,16 +256,27 @@ async function retryOperation(operation, maxRetries = 3) {
 
 async function loadDataFromSheet() {
   try {
-    const response = await fetch(`${SHEETDB_URL}?sheet=VENDAS`);
+    const response = await fetch(`${GAS_URL}?sheet=VENDAS`);
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
     const data = await response.json();
+
+    // Verificar se há erro na resposta
+    if (data.error) {
+      throw new Error(data.error);
+    }
 
     processSheetData(data);
     updateConnectionStatus(true);
     return true;
   } catch (e) {
-    console.error(e);
+    console.error("Erro ao carregar dados:", e);
+    // Inicializar dados locais em caso de erro
     initRifaData();
-    updateConnectionStatus(false);
+    updateConnectionStatus(false, e.message);
     return false;
   }
 }
@@ -252,31 +285,40 @@ async function loadDataFromSheet() {
 function processSheetData(data) {
   rifaData = [];
 
-  // SheetDB pode ter duplicatas - pegar o ÚLTIMO registro de cada número
-  const numerosProcessados = new Set();
+  // Primeiro, coletar todos os números únicos
+  const numerosMap = new Map();
 
-  // Percorrer do FINAL para o INÍCIO (últimas linhas primeiro)
-  for (let i = data.length - 1; i >= 0; i--) {
-    const row = data[i];
-    const numero = parseInt(row["Número"]);
+  // Processar cada linha da planilha
+  data.forEach((row) => {
+    const numero = parseInt(row["Número"] || row["numero"] || 0);
 
-    if (numero > 0 && numero <= 360 && !numerosProcessados.has(numero)) {
-      numerosProcessados.add(numero);
-
-      rifaData.push({
+    if (numero > 0 && numero <= 360) {
+      // Usar o número como chave, mantendo sempre o último registro
+      numerosMap.set(numero, {
         numero: numero,
         status: row["Status"] || row["status"] || "Disponível",
-        comprador: row["Nome do Comprador"] || row["Comprador"] || "",
-        vendedor: row["Nome do Vendedor"] || row["Vendedor"] || "",
+        comprador:
+          row["Nome do Comprador"] ||
+          row["Comprador"] ||
+          row["Nome do Comprador"] ||
+          "",
+        vendedor:
+          row["Nome do Vendedor"] ||
+          row["Vendedor"] ||
+          row["Nome do Vendedor"] ||
+          "",
         pagamento: row["Pagamento"] || row["pagamento"] || "Não",
         dataRegistro: row["Data"] || row["data"] || "",
         observacoes: row["Observações"] || row["observacoes"] || "",
-        autorizadoPor: row["Nome do moderador"] || "",
+        autorizadoPor: row["Nome do moderador"] || row["autorizadoPor"] || "",
       });
     }
-  }
+  });
 
-  // Completar números faltantes
+  // Converter map para array
+  rifaData = Array.from(numerosMap.values());
+
+  // Completar números faltantes (1 a 360)
   for (let i = 1; i <= 360; i++) {
     if (!rifaData.find((item) => item.numero === i)) {
       rifaData.push({
@@ -362,7 +404,7 @@ function updateConnectionStatus(connected, message = "") {
 
   if (connected) {
     statusElement.className = "status-conexao conectado";
-    statusElement.innerHTML = `<i class="fas fa-plug"></i> Conectado ao SheetDB`; // MUDAR AQUI
+    statusElement.innerHTML = `<i class="fas fa-plug"></i> Conectado ao Google Sheets`;
     statusElement.classList.remove("hidden");
   } else {
     statusElement.className = "status-conexao desconectado";
