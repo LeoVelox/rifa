@@ -1,5 +1,5 @@
 // ============ CONFIGURAÇÃO DO SHEET.BEST ============
-const SHEETDB_URL = "https://sheetdb.io/api/v1/zi1b49enxxdsw";
+const SHEETDB_URL = "https://script.google.com/macros/s/AKfycbzdiWA7IhlaU1_7GixuJcubDvzuPJvuKJB-HXdIr_JFIyUjD0-whbZfTUWND8-YYIe5lQ/exec";
 
 // ============ VARIÁVEIS DO SISTEMA ============
 let rifaData = [];
@@ -150,108 +150,34 @@ async function findRowIdByNumber(numero) {
 }
 
 // SALVAR/ATUALIZAR NA PLANILHA
-async function saveToSheet(numero, data, skipDuplicationCheck = false) {
-  console.log(`💾 Salvando número ${numero}...`);
+async function saveToSheet(numero, data) {
+  const payload = {
+  sheet: "Vendas",
+  "Número": numero.toString(),
+  "Status": data.status,
+  "Nome do Comprador": data.comprador,
+  "Nome do Vendedor": data.vendedor,
+  "Nome do moderador": data.autorizadoPor || "",
+  "Pagamento": data.pagamento,
+  "Data": data.dataRegistro,
+  "Observações": data.observacoes || ""
+};
 
-  if (!skipDuplicationCheck) {
-    const existingItem = rifaData.find((item) => item.numero === numero);
 
-    if (
-      existingItem &&
-      existingItem.status === data.status &&
-      existingItem.comprador === data.comprador &&
-      existingItem.vendedor === data.vendedor &&
-      existingItem.pagamento === data.pagamento &&
-      existingItem.autorizadoPor === data.autorizadoPor
-    ) {
-      console.log(
-        `⚠️ Número ${numero} já está atualizado localmente. Ignorando...`,
-      );
-      return true;
-    }
-  }
+  const response = await fetch(SHEETDB_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 
-  try {
-    const sheetData = {
-      Número: numero.toString(),
-      Status: data.status || "Disponível",
-      "Nome do Comprador": data.comprador || "",
-      "Nome do Vendedor": data.vendedor || "",
-      "Nome do moderador": data.autorizadoPor || "",
-      Pagamento: data.pagamento || "Não",
-      Data: data.dataRegistro || new Date().toLocaleDateString("pt-BR"),
-      Observações: data.observacoes || "",
-    };
-
-    // SHEETDB: Verificar se já existe registro com este número
-    const checkUrl = `${SHEETDB_URL}/search?Número=${numero}`;
-    const checkResponse = await fetch(checkUrl);
-
-    let isUpdate = false;
-
-    if (checkResponse.ok) {
-      const existingData = await checkResponse.json();
-      isUpdate = existingData && existingData.length > 0;
-    }
-
-    if (isUpdate) {
-      // ATUALIZAR no SheetDB - usar PUT com filtro
-      const updateUrl = `${SHEETDB_URL}/Número/${numero}`;
-
-      const response = await fetch(updateUrl, {
-        method: "PUT", // SheetDB usa PUT para atualizar
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ data: sheetData }),
-      });
-
-      if (response.ok) {
-        console.log("✅ Linha atualizada no SheetDB");
-        return true;
-      } else {
-        console.warn(`⚠️ PUT falhou, tentando DELETE + POST...`);
-        // Tentar alternativa: deletar e criar novo
-        return await saveWithDeleteAndCreate(numero, sheetData);
-      }
-    } else {
-      // CRIAR nova linha
-      const response = await fetch(SHEETDB_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(sheetData),
-      });
-
-      if (response.ok) {
-        console.log("✅ Nova linha criada no SheetDB");
-        return true;
-      } else {
-        const errorText = await response.text();
-        throw new Error(`Erro ${response.status}: ${errorText}`);
-      }
-    }
-  } catch (error) {
-    console.error("❌ Erro ao salvar no SheetDB:", error);
-    showNotification(
-      `Erro ao salvar número ${numero}. Verifique conexão.`,
-      "error",
-    );
-    return false;
-  }
+  return response.ok;
 }
 
 async function saveWithDeleteAndCreate(numero, sheetData) {
   try {
     // Primeiro deletar se existir
     const deleteUrl = `${SHEETDB_URL}/Número/${numero}`;
-    await fetch(deleteUrl, {
-      method: "DELETE",
-      headers: { Accept: "application/json" },
-    });
+    await fetch(deleteUrl, { method: "DELETE" });
 
     // Aguardar um pouco
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -260,10 +186,15 @@ async function saveWithDeleteAndCreate(numero, sheetData) {
     const response = await fetch(SHEETDB_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify(sheetData),
+      body: JSON.stringify({
+        sheet: "Registro_Sorteios",
+        "Número": 12,
+        "Status": "Vendido",
+        "Nome do Comprador": "Fulano",
+        "Nome do Vendedor": "Ciclano"
+      })
     });
 
     return response.ok;
@@ -303,36 +234,16 @@ async function retryOperation(operation, maxRetries = 3) {
 
 async function loadDataFromSheet() {
   try {
-    const response = await fetchWithTimeout(SHEETDB_URL, {}, 15000);
-
-    if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
-    }
-
+    const response = await fetch(`${SHEETDB_URL}?sheet=VENDAS`);
     const data = await response.json();
 
-    if (data && Array.isArray(data)) {
-      console.log("📥 Total de linhas no SheetDB:", data.length);
-
-      // Log para debug
-      if (data.length > 0) {
-        console.log("Primeira linha:", data[0]);
-      }
-
-      processSheetData(data);
-      updateConnectionStatus(true);
-      showNotification("Dados carregados com sucesso!", "success");
-      return true;
-    } else {
-      initRifaData();
-      updateConnectionStatus(false, "Planilha vazia");
-      return true;
-    }
-  } catch (error) {
-    console.error("❌ Erro ao carregar do SheetDB:", error);
+    processSheetData(data);
+    updateConnectionStatus(true);
+    return true;
+  } catch (e) {
+    console.error(e);
     initRifaData();
-    updateConnectionStatus(false, "Usando dados locais");
-    showNotification("Sem conexão. Usando dados locais...", "warning");
+    updateConnectionStatus(false);
     return false;
   }
 }
@@ -347,7 +258,7 @@ function processSheetData(data) {
   // Percorrer do FINAL para o INÍCIO (últimas linhas primeiro)
   for (let i = data.length - 1; i >= 0; i--) {
     const row = data[i];
-    const numero = parseInt(row["Número"] || row["número"] || 0);
+    const numero = parseInt(row["Número"]);
 
     if (numero > 0 && numero <= 360 && !numerosProcessados.has(numero)) {
       numerosProcessados.add(numero);
