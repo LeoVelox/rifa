@@ -139,7 +139,7 @@ function atualizarCamposAoSelecionar() {
 
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(numero, data) {
-  try {
+  return new Promise((resolve) => {
     const payload = {
       sheet: "VENDAS",
       Número: numero.toString(),
@@ -152,43 +152,51 @@ async function saveToSheet(numero, data) {
       Observações: data.observacoes || "",
     };
 
-    console.log("📤 Enviando para Google Sheets:", payload);
+    console.log("📤 Enviando via formulário:", payload);
 
-    // SOLUÇÃO PARA CORS: Usar fetch com mode: 'no-cors' e método alternativo
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      mode: "no-cors", // <-- IMPORTANTE: evita verificação CORS
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+    // Criar formulário invisível
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = GAS_URL;
+    form.target = "_blank"; // Abrir em nova aba/janela
+    form.style.display = "none";
+
+    // Adicionar campos
+    Object.keys(payload).forEach((key) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = payload[key];
+      form.appendChild(input);
     });
 
-    // Como mode: 'no-cors' retorna uma resposta opaca,
-    // vamos assumir que foi bem-sucedido e atualizar localmente
-    console.log("✅ Requisição enviada (modo no-cors)");
+    // Adicionar ao documento e submeter
+    document.body.appendChild(form);
+    form.submit();
 
-    // ATUALIZAR DADOS LOCALMENTE (IMPORTANTE!)
-    const item = rifaData.find((item) => item.numero === numero);
-    if (item) {
-      item.status = data.status;
-      item.comprador = data.comprador;
-      item.vendedor = data.vendedor;
-      item.pagamento = data.pagamento;
-      item.autorizadoPor = data.autorizadoPor;
-      item.observacoes = data.observacoes;
-      item.dataRegistro = data.dataRegistro;
-    }
+    // Remover formulário
+    setTimeout(() => {
+      document.body.removeChild(form);
 
-    updateCounters();
-    generateRifaGrid();
+      // Atualizar localmente (assumindo sucesso)
+      const item = rifaData.find((item) => item.numero === numero);
+      if (item) {
+        item.status = data.status;
+        item.comprador = data.comprador;
+        item.vendedor = data.vendedor;
+        item.pagamento = data.pagamento;
+        item.autorizadoPor = data.autorizadoPor;
+        item.observacoes = data.observacoes;
+        item.dataRegistro = data.dataRegistro;
+      }
 
-    return true;
-  } catch (error) {
-    console.error("❌ Erro ao salvar no Google Sheets:", error);
-    showNotification(`Erro ao salvar: ${error.message}`, "error");
-    return false;
-  }
+      updateCounters();
+      generateRifaGrid();
+
+      console.log("✅ Dados enviados via formulário");
+      resolve(true);
+    }, 1000);
+  });
 }
 
 async function saveWithDeleteAndCreate(numero, sheetData) {
