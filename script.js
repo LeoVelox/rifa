@@ -224,9 +224,8 @@ async function loadDataFromSupabase() {
 
     const data = await res.json();
 
-    // Converte formato Supabase ➜ formato esperado
     const normalizado = data.map((row) => ({
-      numero: parseInt(row.numero),
+      numero: Number(row.numero) || 0,
       status: row.status || "Disponível",
       comprador: row.nome_do_comprador || "",
       vendedor: row.nome_do_vendedor || "",
@@ -234,11 +233,32 @@ async function loadDataFromSupabase() {
       dataRegistro: row.data_registro || "",
       observacoes: row.observacoes || "",
       autorizadoPor: row.nome_do_moderador || ""
-    }));
+    })).filter(item => item.numero > 0);
 
-    processSheetData(normalizado);
+    rifaData = normalizado;
+
+    for (let i = 1; i <= 360; i++) {
+      if (!rifaData.find(item => item.numero === i)) {
+        rifaData.push({
+          numero: i,
+          status: "Disponível",
+          comprador: "",
+          vendedor: "",
+          pagamento: "Não",
+          dataRegistro: "",
+          observacoes: "",
+          autorizadoPor: "",
+        });
+      }
+    }
+
+    rifaData.sort((a, b) => a.numero - b.numero);
+
+    updateCounters();
+    generateRifaGrid();
     updateConnectionStatus(true);
     return true;
+
   } catch (e) {
     console.error("💥 Erro Supabase:", e);
     initRifaData();
@@ -246,7 +266,6 @@ async function loadDataFromSupabase() {
     return false;
   }
 }
-
 
 // Processar dados da planilha
 function processSheetData(data) {
