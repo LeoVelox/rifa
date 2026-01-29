@@ -138,20 +138,32 @@ function atualizarCamposAoSelecionar() {
 }
 
 // SALVAR/ATUALIZAR NA PLANILHA
-function saveToSheet(dados) {
-  const formData = new URLSearchParams(dados);
-
-  fetch(GAS_URL, {
-    method: "POST",
-    body: formData,
-  })
-    .then((res) => res.text())
-    .then((text) => {
-      const clean = text.trim().replace(/^[^\[{]*/, "");
-      const data = JSON.parse(clean);
-      console.log("✅ Resultado final:", data);
+async function saveToSheet(dados, sheet = "VENDAS") {
+  try {
+    const formData = new URLSearchParams({
+      ...dados,
+      sheet
     });
+
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      body: formData,
+    });
+
+    const text = await res.text();
+
+    const clean = text.trim().replace(/^[^\[{]*/, "");
+    const data = JSON.parse(clean);
+
+    console.log("✅ Resposta GAS:", data);
+
+    return data.success === true;
+  } catch (err) {
+    console.error("❌ Erro saveToSheet:", err);
+    return false;
+  }
 }
+
 
 // Funções auxiliares:
 async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
@@ -896,7 +908,7 @@ async function reserveNumbers() {
         };
 
         // Salva a nova reserva
-        const salvo = await saveToSheet(dados.numero, dados);
+        const salvo = await saveToSheet(dados);
 
         if (salvo) {
           // Atualiza localmente
@@ -1009,7 +1021,7 @@ async function confirmarPagamento() {
   try {
     // Usar retry para operação crítica
     const salvo = await retryOperation(async () => {
-      return await saveToSheet(numero, dadosParaSalvar);
+      return await saveToSheet(dados);
     }, 2);
 
     if (salvo) {
@@ -1101,7 +1113,7 @@ async function cancelarReserva() {
 
   try {
     // PRIMEIRO salva na planilha
-    const salvo = await saveToSheet(numero, dadosParaSalvar);
+    const salvo = await saveToSheet(dados);
 
     if (salvo) {
       // DEPOIS atualiza localmente
@@ -1238,7 +1250,7 @@ async function forceSaveToSheet(numero) {
   }
 
   console.log(`🔧 Forçando salvamento do número ${numero}...`);
-  return await saveToSheet(numero, item, true);
+  return await saveToSheet(dados);
 }
 
 function safeAddEvent(id, event, handler) {
