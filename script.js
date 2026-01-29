@@ -140,26 +140,15 @@ function atualizarCamposAoSelecionar() {
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(dados, sheet = "VENDAS") {
   try {
-    const formData = new URLSearchParams({
-      ...dados,
-      sheet
-    });
-
     const res = await fetch(GAS_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
+      body: new URLSearchParams({
         ...dados,
         sheet
       })
     });
 
-    const text = await res.text();
-
-    const clean = text.trim().replace(/^[^\[{]*/, "");
-    const data = JSON.parse(clean);
+    const data = await res.json(); // ✅ resposta do GAS
 
     console.log("✅ Resposta GAS:", data);
 
