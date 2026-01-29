@@ -201,42 +201,6 @@ async function saveToSheet(numero, data) {
   }
 }
 
-async function saveWithDeleteAndCreate(numero, sheetData) {
-  try {
-    // PRIMEIRO: Salvar usando a função principal saveToSheet
-    const salvo = await saveToSheet(numero, sheetData);
-
-    if (!salvo) {
-      // Fallback: Tentar salvar usando um payload diferente
-      const payload = {
-        sheet: "VENDAS", // Use "VENDAS" em vez de "Registro_Sorteios"
-        Número: numero.toString(),
-        Status: sheetData.status,
-        "Nome do Comprador": sheetData.comprador,
-        "Nome do Vendedor": sheetData.vendedor,
-        "Nome do moderador": sheetData.autorizadoPor || "",
-        Pagamento: sheetData.pagamento,
-        Data: sheetData.dataRegistro,
-        Observações: sheetData.observacoes || "",
-      };
-
-      const response = await fetch(GAS_URL, {
-        // ← CORRIGIDO: GAS_URL
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      return response.ok;
-    }
-
-    return salvo;
-  } catch (error) {
-    console.error("Erro no fallback:", error);
-    return false;
-  }
-}
-
 // Funções auxiliares:
 async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
   const controller = new AbortController();
@@ -1030,59 +994,12 @@ async function reserveNumbers() {
   }
 }
 
-// Função para limpar dados de números cancelados quando forem reativados
-function limparDadosCancelados(numero) {
-  const item = rifaData.find((item) => item.numero === numero);
-  if (item && item.status === "Cancelado") {
-    // Limpa os dados antigos para que o novo comprador possa reservar
-    item.comprador = "";
-    item.vendedor = "";
-    item.observacoes = `Número cancelado foi reativado em ${new Date().toLocaleString("pt-BR")}`;
-
-    console.log(
-      `🔄 Número ${numero} cancelado - dados limpos para nova reserva`,
-    );
-    return true;
-  }
-  return false;
-}
-
 // ============ ADICIONE ESTA FUNÇÃO PARA LIMPAR CORRETAMENTE ============
 
 function limparCamposReserva() {
   document.getElementById("nomeComprador").value = "";
   document.getElementById("nomeVendedor").value = "";
   clearSelection();
-}
-
-// FUNÇÃO ESPECÍFICA PARA REATIVAR NÚMERO CANCELADO
-async function reativarNumeroCancelado(numero) {
-  const item = rifaData.find((item) => item.numero === numero);
-  if (!item) return false;
-
-  // Se o número está cancelado, reativa como disponível
-  if (item.status === "Cancelado") {
-    const dadosReativacao = {
-      status: "Disponível",
-      comprador: "", // Limpa o comprador
-      vendedor: "", // Limpa o vendedor
-      pagamento: "Não",
-      dataRegistro: new Date().toLocaleDateString("pt-BR"),
-      observacoes: `Número reativado por sistema em ${new Date().toLocaleString("pt-BR")}`,
-      autorizadoPor: "Sistema",
-    };
-
-    const salvo = await saveToSheet(numero, dadosReativacao);
-    if (salvo) {
-      item.status = "Disponível";
-      item.comprador = "";
-      item.vendedor = "";
-      item.observacoes = dadosReativacao.observacoes;
-      return true;
-    }
-    return false;
-  }
-  return false;
 }
 
 // MODERADOR: Confirmar pagamento
@@ -1372,6 +1289,11 @@ async function forceSaveToSheet(numero) {
   return await saveToSheet(numero, item, true);
 }
 
+function safeAddEvent(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+}
+
 // Adicionar ao console para testes
 window.forceSave = forceSaveToSheet;
 
@@ -1402,159 +1324,82 @@ window.addEventListener("error", function (event) {
   }
 });
 
-// ============ INICIALIZAÇÃO ============
+// ============ INICIALIZAÇÃO DO SISTEMA ============
 
 document.addEventListener("DOMContentLoaded", async function () {
-  // Iniciar como vendedor
+  console.log("🚀 Sistema iniciado");
+
+  // ================= ESTADO INICIAL =================
   initRifaData();
   updateLoginUI();
   atualizarInterfacePorPapel();
 
-  // Event Listeners para login/logout
-  const btnEntrar = document.getElementById("btnEntrar");
-  if (btnEntrar) btnEntrar.addEventListener("click", loginModerator);
+  // ================= LOGIN / LOGOUT =================
+  safeAddEvent("btnEntrar", "click", loginModerator);
+  safeAddEvent("btnCancelarLogin", "click", closeLoginModal);
+  safeAddEvent("btnLogout", "click", logoutModerator);
 
-  const btnCancelarLogin = document.getElementById("btnCancelarLogin");
-  if (btnCancelarLogin)
-    btnCancelarLogin.addEventListener("click", closeLoginModal);
+  safeAddEvent("loginSenha", "keypress", function (e) {
+    if (e.key === "Enter") loginModerator();
+  });
 
-  const btnLogout = document.getElementById("btnLogout");
-  if (btnLogout) btnLogout.addEventListener("click", logoutModerator);
+  // ================= TROCA DE PAPEL =================
+  safeAddEvent("btnVendedor", "click", () => {
+    if (userRole !== "vendedor") toggleUserRole("vendedor");
+  });
 
-  const btnReservar = document.getElementById("btnReservar");
-  if (btnReservar) btnReservar.addEventListener("click", reserveNumbers);
+  safeAddEvent("btnModerador", "click", () => {
+    if (userRole === "vendedor") showLoginModal();
+  });
 
-  const btnLimpar = document.getElementById("btnLimpar");
-  if (btnLimpar) btnLimpar.addEventListener("click", limparCamposReserva);
+  // ================= AÇÕES DO VENDEDOR =================
+  safeAddEvent("btnReservar", "click", debounce(reserveNumbers, 500));
 
-  const loginSenha = document.getElementById("loginSenha");
-  if (loginSenha) {
-    loginSenha.addEventListener("keypress", function (e) {
-      if (e.key === "Enter") {
-        loginModerator();
-      }
-    });
-  }
+  safeAddEvent("btnLimpar", "click", limparCamposReserva);
+  safeAddEvent("btnLimparSelecao", "click", clearSelection);
 
-  // Event Listeners para papéis
-  const btnVendedor = document.getElementById("btnVendedor");
-  if (btnVendedor) {
-    btnVendedor.addEventListener("click", () => {
-      if (userRole !== "vendedor") {
-        toggleUserRole("vendedor");
-      }
-    });
-  }
+  // ================= AÇÕES DO MODERADOR =================
+  safeAddEvent(
+    "btnConfirmarPagamento",
+    "click",
+    debounce(confirmarPagamento, 500),
+  );
 
-  const btnModerador = document.getElementById("btnModerador");
-  if (btnModerador) {
-    btnModerador.addEventListener("click", () => {
-      if (userRole === "vendedor") {
-        showLoginModal();
-      }
-    });
-  }
+  safeAddEvent("btnCancelarReserva", "click", debounce(cancelarReserva, 500));
 
-  // Vendedor - com debounce de 500ms
-  document
-    .getElementById("btnReservar")
-    .addEventListener("click", debounce(reserveNumbers, 500));
-
-  // Moderador - com debounce de 500ms
-  document
-    .getElementById("btnConfirmarPagamento")
-    .addEventListener("click", debounce(confirmarPagamento, 500));
-  document
-    .getElementById("btnCancelarReserva")
-    .addEventListener("click", debounce(cancelarReserva, 500));
-
-  // Vendedor
-  document
-    .getElementById("btnLimpar")
-    .addEventListener("click", clearSelection);
-  document
-    .getElementById("btnLimparSelecao")
-    .addEventListener("click", clearSelection);
-
-  // Filtros
+  // ================= FILTROS =================
   document.querySelectorAll(".filter-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
       document
         .querySelectorAll(".filter-btn")
         .forEach((b) => b.classList.remove("active"));
+
       this.classList.add("active");
       generateRifaGrid();
     });
   });
 
-  // Busca
-  document
-    .getElementById("searchInput")
-    .addEventListener("input", generateRifaGrid);
+  // ================= BUSCA =================
+  safeAddEvent("searchInput", "input", generateRifaGrid);
 
-  // Carregar dados do Sheet.best após inicialização
+  // ================= DEBUG =================
+  safeAddEvent("btnDebug", "click", function () {
+    console.clear();
+    console.log("=== 🐛 DEBUG DO SISTEMA ===");
+    console.log("📡 GAS_URL:", GAS_URL);
+    console.log("👤 Role:", userRole);
+    console.log("👥 Usuário logado:", usuarioLogado);
+    console.log("🔢 Selecionados:", selectedNumbers);
+    console.log("📊 Total rifaData:", rifaData.length);
+  });
+
+  safeAddEvent("btnTestLoad", "click", async function () {
+    console.log("🔄 Testando loadDataFromSheet()");
+    await loadDataFromSheet();
+  });
+
+  // ================= CARGA INICIAL =================
   setTimeout(async () => {
     await loadDataFromSheet();
   }, 500);
 });
-
-// Adicione isto antes do fechamento do DOMContentLoaded
-document.getElementById("btnDebug").addEventListener("click", function () {
-  console.clear();
-  console.log("=== 🐛 DEBUG DO SISTEMA ===");
-  console.log("📡 URL do GAS:", GAS_URL);
-  console.log("👤 Role atual:", userRole);
-  console.log("🔢 Números selecionados:", selectedNumbers);
-  console.log("📊 Total em rifaData:", rifaData.length);
-  console.log("📋 Primeiros 5 registros:", rifaData.slice(0, 5));
-
-  // Verificar estrutura de um registro
-  if (rifaData.length > 0) {
-    console.log("🔍 Estrutura do primeiro registro:");
-    const sample = rifaData[0];
-    for (const key in sample) {
-      console.log(`  ${key}: "${sample[key]}" (${typeof sample[key]})`);
-    }
-  }
-
-  // Testar a URL diretamente
-  fetch(`${GAS_URL}?sheet=VENDAS`)
-    .then((r) => {
-      console.log("📡 Teste fetch - Status:", r.status);
-      return r.text();
-    })
-    .then((text) => {
-      console.log("📡 Teste fetch - Primeiros 500 chars:");
-      console.log(text.substring(0, 500));
-      try {
-        const json = JSON.parse(text);
-        console.log("✅ JSON parseado com sucesso!");
-        console.log("📊 Tipo:", Array.isArray(json) ? "Array" : "Object");
-        if (Array.isArray(json)) {
-          console.log("📈 Tamanho do array:", json.length);
-        }
-      } catch (e) {
-        console.error("❌ Não é JSON válido:", e.message);
-      }
-    })
-    .catch((e) => console.error("❌ Erro no fetch:", e));
-});
-
-document
-  .getElementById("btnTestLoad")
-  .addEventListener("click", async function () {
-    console.log("🔄 Testando carga de dados...");
-    await loadDataFromSheet();
-  });
-
-// Adicione também uma função para forçar reload
-window.debugReload = async function () {
-  console.clear();
-  console.log("🔄 Recarregando dados...");
-  const success = await loadDataFromSheet();
-  if (success) {
-    showNotification("Dados recarregados com sucesso!", "success");
-  } else {
-    showNotification("Falha ao recarregar dados", "error");
-  }
-};
