@@ -1,6 +1,6 @@
 // ============ CONFIGURAÇÃO DO GOOGLE APPS SCRIPT ============
 const GAS_URL =
-  "https://script.google.com/macros/s/AKfycbzdiWA7IhlaU1_7GixuJcubDvzuPJvuKJB-HXdIr_JFIyUjD0-whbZfTUWND8-YYIe5lQ/exec";
+  "https://script.google.com/macros/s/AKfycbw5bxw_dIhsYJiG1s97podh8XTL_KkImfQJ4BWCYi4GHOwotsqNeADxXFSFLh25FasR/exec";
 
 // ============ VARIÁVEIS DO SISTEMA ============
 let rifaData = [];
