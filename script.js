@@ -1411,47 +1411,49 @@ document.addEventListener("DOMContentLoaded", async function () {
   atualizarInterfacePorPapel();
 
   // Event Listeners para login/logout
-  document
-    .getElementById("btnEntrar")
-    .addEventListener("click", loginModerator);
-  document
-    .getElementById("btnCancelarLogin")
-    .addEventListener("click", closeLoginModal);
-  document
-    .getElementById("btnLogout")
-    .addEventListener("click", logoutModerator);
-  document
-    .getElementById("btnReservar")
-    .addEventListener("click", reserveNumbers);
-  document
-    .getElementById("btnLimpar")
-    .addEventListener("click", limparCamposReserva);
+  const btnEntrar = document.getElementById("btnEntrar");
+  if (btnEntrar) btnEntrar.addEventListener("click", loginModerator);
 
-  // Permitir login com Enter
-  document
-    .getElementById("loginSenha")
-    .addEventListener("keypress", function (e) {
+  const btnCancelarLogin = document.getElementById("btnCancelarLogin");
+  if (btnCancelarLogin)
+    btnCancelarLogin.addEventListener("click", closeLoginModal);
+
+  const btnLogout = document.getElementById("btnLogout");
+  if (btnLogout) btnLogout.addEventListener("click", logoutModerator);
+
+  const btnReservar = document.getElementById("btnReservar");
+  if (btnReservar) btnReservar.addEventListener("click", reserveNumbers);
+
+  const btnLimpar = document.getElementById("btnLimpar");
+  if (btnLimpar) btnLimpar.addEventListener("click", limparCamposReserva);
+
+  const loginSenha = document.getElementById("loginSenha");
+  if (loginSenha) {
+    loginSenha.addEventListener("keypress", function (e) {
       if (e.key === "Enter") {
         loginModerator();
       }
     });
+  }
 
   // Event Listeners para papéis
-  document.getElementById("btnVendedor").addEventListener("click", () => {
-    if (userRole !== "vendedor") {
-      toggleUserRole("vendedor");
-    }
-  });
+  const btnVendedor = document.getElementById("btnVendedor");
+  if (btnVendedor) {
+    btnVendedor.addEventListener("click", () => {
+      if (userRole !== "vendedor") {
+        toggleUserRole("vendedor");
+      }
+    });
+  }
 
-  document.getElementById("btnModerador").addEventListener("click", () => {
-    if (userRole === "vendedor") {
-      // Se está como vendedor e clica em moderador, pede login
-      showLoginModal();
-    } else if (userRole === "moderador") {
-      // Se já está como moderador e clica novamente, não faz nada
-      return;
-    }
-  });
+  const btnModerador = document.getElementById("btnModerador");
+  if (btnModerador) {
+    btnModerador.addEventListener("click", () => {
+      if (userRole === "vendedor") {
+        showLoginModal();
+      }
+    });
+  }
 
   // Vendedor - com debounce de 500ms
   document
