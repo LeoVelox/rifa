@@ -147,17 +147,9 @@ function saveToSheet(dados) {
   })
     .then((res) => res.text())
     .then((text) => {
-      console.log("📩 Resposta bruta do GAS:", text);
-
-      // Limpa possíveis caracteres inválidos
-      const cleanText = text.trim().replace(/^[^\[{]*/, "");
-
-      const data = JSON.parse(cleanText);
-
-      console.log("✅ Sucesso real:", data);
-    })
-    .catch((err) => {
-      console.error("❌ Erro real:", err);
+      const clean = text.trim().replace(/^[^\[{]*/, "");
+      const data = JSON.parse(clean);
+      console.log("✅ Resultado final:", data);
     });
 }
 
