@@ -1,6 +1,12 @@
-// ============ CONFIGURAÇÃO DO GOOGLE APPS SCRIPT ============
-const GAS_URL =
-  "https://script.google.com/macros/s/AKfycbw5bxw_dIhsYJiG1s97podh8XTL_KkImfQJ4BWCYi4GHOwotsqNeADxXFSFLh25FasR/exec";
+// ============ CONFIGURAÇÃO DO SUPABSE ============
+const SUPABASE_URL = "https://yxtgkqgbtwfzwsfpotak.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4dGdrcWdidHdmendzZnBvdGFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2OTUyNjEsImV4cCI6MjA4NTI3MTI2MX0.Vt-7DalAfTFA4NqpntxNutk3frcwihoOMKvvX3k_fA4";
+
+const SUPABASE_HEADERS = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json"
+};
 
 // ============ VARIÁVEIS DO SISTEMA ============
 let rifaData = [];
@@ -138,23 +144,51 @@ function atualizarCamposAoSelecionar() {
 }
 
 // SALVAR/ATUALIZAR NA PLANILHA
-async function saveToSheet(dados, sheet = "VENDAS") {
+async function saveToSupabase(dados) {
   try {
-    const res = await fetch(GAS_URL, {
-      method: "POST",
-      body: new URLSearchParams({
-        ...dados,
-        sheet
-      })
-    });
+    // 1️⃣ Tenta atualizar pelo número
+    const updateRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/vendas?numero=eq.${dados.numero}`,
+      {
+        method: "PATCH",
+        headers: SUPABASE_HEADERS,
+        body: JSON.stringify({
+          status: dados.status,
+          nome_do_comprador: dados.comprador,
+          nome_do_vendedor: dados.vendedor,
+          nome_do_moderador: dados.autorizadoPor,
+          pagamento: dados.pagamento,
+          observacoes: dados.observacoes,
+          data_registro: new Date().toISOString()
+        })
+      }
+    );
 
-    const data = await res.json(); // ✅ resposta do GAS
+    // PATCH bem-sucedido (mesmo sem body)
+    if (updateRes.status === 204) return true;
 
-    console.log("✅ Resposta GAS:", data);
+    // 2️⃣ Se não existir, cria
+    const insertRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/vendas`,
+      {
+        method: "POST",
+        headers: SUPABASE_HEADERS,
+        body: JSON.stringify({
+          numero: dados.numero,
+          status: dados.status,
+          nome_do_comprador: dados.comprador,
+          nome_do_vendedor: dados.vendedor,
+          nome_do_moderador: dados.autorizadoPor,
+          pagamento: dados.pagamento,
+          observacoes: dados.observacoes,
+          data_registro: new Date().toISOString()
+        })
+      }
+    );
 
-    return data.success === true;
+    return insertRes.ok;
   } catch (err) {
-    console.error("❌ Erro saveToSheet:", err);
+    console.error("❌ Erro Supabase:", err);
     return false;
   }
 }
@@ -188,53 +222,42 @@ async function retryOperation(operation, maxRetries = 3) {
 
 // ============ CARREGAR DADOS DA PLANILHA ============
 
-async function loadDataFromSheet() {
+async function loadDataFromSupabase() {
   try {
-    console.log("🔄 Iniciando carregamento de dados...");
-    console.log("📡 URL:", `${GAS_URL}?sheet=VENDAS`);
+    console.log("🔄 Carregando dados do Supabase...");
 
-    const response = await fetch(`${GAS_URL}?sheet=VENDAS`);
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/vendas?select=*`,
+      { headers: SUPABASE_HEADERS }
+    );
 
-    console.log("📊 Status da resposta:", response.status);
-    console.log("📊 OK?", response.ok);
+    if (!res.ok) throw new Error("Erro ao buscar dados");
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ Resposta de erro:", errorText);
-      throw new Error(`Erro HTTP: ${response.status} - ${errorText}`);
-    }
+    const data = await res.json();
 
-    const data = await response.json();
-    console.log("✅ Dados recebidos:", data);
+    // Converte formato Supabase ➜ formato esperado
+    const normalizado = data.map((row) => ({
+      numero: parseInt(row.numero),
+      status: row.status || "Disponível",
+      comprador: row.nome_do_comprador || "",
+      vendedor: row.nome_do_vendedor || "",
+      pagamento: row.pagamento || "Não",
+      dataRegistro: row.data_registro || "",
+      observacoes: row.observacoes || "",
+      autorizadoPor: row.nome_do_moderador || ""
+    }));
 
-    // Verificar estrutura dos dados
-    if (Array.isArray(data)) {
-      console.log(`📈 Total de registros: ${data.length}`);
-      if (data.length > 0) {
-        console.log("📝 Primeiro registro:", data[0]);
-        console.log("🔑 Chaves do primeiro registro:", Object.keys(data[0]));
-      }
-    } else {
-      console.warn("⚠️ Dados não são um array:", data);
-    }
-
-    // Verificar se há erro na resposta
-    if (data.error) {
-      console.error("❌ Erro na resposta:", data.error);
-      throw new Error(data.error);
-    }
-
-    processSheetData(data);
+    processSheetData(normalizado);
     updateConnectionStatus(true);
     return true;
   } catch (e) {
-    console.error("💥 Erro ao carregar dados:", e);
-    console.error("📋 Stack:", e.stack);
+    console.error("💥 Erro Supabase:", e);
     initRifaData();
     updateConnectionStatus(false, e.message);
     return false;
   }
 }
+
 
 // Processar dados da planilha
 function processSheetData(data) {
@@ -1353,12 +1376,11 @@ document.addEventListener("DOMContentLoaded", async function () {
   });
 
   safeAddEvent("btnTestLoad", "click", async function () {
-    console.log("🔄 Testando loadDataFromSheet()");
-    await loadDataFromSheet();
-  });
+  await loadDataFromSupabase();
+});
 
   // ================= CARGA INICIAL =================
   setTimeout(async () => {
-    await loadDataFromSheet();
-  }, 500);
+  await loadDataFromSupabase();
+}, 500);
 });
