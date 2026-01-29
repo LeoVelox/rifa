@@ -1,4 +1,4 @@
-// ============ CONFIGURAÇÃO DO SHEET.BEST ============
+// ============ CONFIGURAÇÃO DO GOOGLE APPS SCRIPT ============
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbzdiWA7IhlaU1_7GixuJcubDvzuPJvuKJB-HXdIr_JFIyUjD0-whbZfTUWND8-YYIe5lQ/exec";
 
@@ -137,43 +137,26 @@ function atualizarCamposAoSelecionar() {
   }
 }
 
-// ============ SHEET.BEST - FUNÇÕES ============
-
-// ENCONTRAR ID DA LINHA PELO NÚMERO
-async function findRowIdByNumber(numero) {
-  try {
-    // SheetDB usa o próprio número como identificador
-    return numero.toString();
-  } catch (error) {
-    console.log("Busca por número falhou:", error);
-    return null;
-  }
-}
-
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(numero, data) {
   try {
-    // Mapear os dados para os nomes exatos das colunas na planilha
-    // Verifique os nomes exatos das colunas na aba VENDAS
     const payload = {
-      sheet: "VENDAS", // ou "Registro_Sorteios" dependendo da operação
+      sheet: "VENDAS",
       Número: numero.toString(),
       Status: data.status,
       "Nome do Comprador": data.comprador,
       "Nome do Vendedor": data.vendedor,
       "Nome do moderador": data.autorizadoPor || "",
       Pagamento: data.pagamento,
-      Data: data.dataRegistro,
+      Data: data.dataRegistro || new Date().toLocaleDateString("pt-BR"),
       Observações: data.observacoes || "",
     };
 
-    console.log("Enviando para Google Sheets:", payload);
+    console.log("📤 Enviando para Google Sheets:", payload);
 
     const response = await fetch(GAS_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -184,12 +167,13 @@ async function saveToSheet(numero, data) {
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || "Erro desconhecido ao salvar");
+      throw new Error(result.error || "Erro ao salvar");
     }
 
+    console.log("✅ Salvo com sucesso:", result.message);
     return true;
   } catch (error) {
-    console.error("Erro ao salvar no Google Sheets:", error);
+    console.error("❌ Erro ao salvar:", error);
     showNotification(`Erro ao salvar: ${error.message}`, "error");
     return false;
   }
@@ -197,29 +181,34 @@ async function saveToSheet(numero, data) {
 
 async function saveWithDeleteAndCreate(numero, sheetData) {
   try {
-    // Primeiro deletar se existir
-    const deleteUrl = `${SHEETDB_URL}/Número/${numero}`;
-    await fetch(deleteUrl, { method: "DELETE" });
+    // PRIMEIRO: Salvar usando a função principal saveToSheet
+    const salvo = await saveToSheet(numero, sheetData);
 
-    // Aguardar um pouco
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (!salvo) {
+      // Fallback: Tentar salvar usando um payload diferente
+      const payload = {
+        sheet: "VENDAS", // Use "VENDAS" em vez de "Registro_Sorteios"
+        Número: numero.toString(),
+        Status: sheetData.status,
+        "Nome do Comprador": sheetData.comprador,
+        "Nome do Vendedor": sheetData.vendedor,
+        "Nome do moderador": sheetData.autorizadoPor || "",
+        Pagamento: sheetData.pagamento,
+        Data: sheetData.dataRegistro,
+        Observações: sheetData.observacoes || "",
+      };
 
-    // Criar novo
-    const response = await fetch(SHEETDB_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sheet: "Registro_Sorteios",
-        Número: 12,
-        Status: "Vendido",
-        "Nome do Comprador": "Fulano",
-        "Nome do Vendedor": "Ciclano",
-      }),
-    });
+      const response = await fetch(GAS_URL, {
+        // ← CORRIGIDO: GAS_URL
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    return response.ok;
+      return response.ok;
+    }
+
+    return salvo;
   } catch (error) {
     console.error("Erro no fallback:", error);
     return false;
@@ -274,7 +263,6 @@ async function loadDataFromSheet() {
     return true;
   } catch (e) {
     console.error("Erro ao carregar dados:", e);
-    // Inicializar dados locais em caso de erro
     initRifaData();
     updateConnectionStatus(false, e.message);
     return false;
@@ -780,9 +768,6 @@ async function reserveNumbers() {
                 : "",
           };
 
-          // Salva a reativação
-          await saveToSheet(numero, dadosReativacao, true);
-
           // Atualiza localmente
           item.status = "Disponível";
           item.comprador = "";
@@ -806,7 +791,7 @@ async function reserveNumbers() {
         };
 
         // Salva a nova reserva
-        const salvo = await saveToSheet(dados.numero, dados, true);
+        const salvo = await saveToSheet(dados.numero, dados);
 
         if (salvo) {
           // Atualiza localmente
@@ -898,7 +883,7 @@ async function reativarNumeroCancelado(numero) {
       autorizadoPor: "Sistema",
     };
 
-    const salvo = await saveToSheet(numero, dadosReativacao, true);
+    const salvo = await saveToSheet(numero, dadosReativacao);
     if (salvo) {
       item.status = "Disponível";
       item.comprador = "";
@@ -966,7 +951,7 @@ async function confirmarPagamento() {
   try {
     // Usar retry para operação crítica
     const salvo = await retryOperation(async () => {
-      return await saveToSheet(numero, dadosParaSalvar, true);
+      return await saveToSheet(numero, dadosParaSalvar);
     }, 2);
 
     if (salvo) {
@@ -1058,7 +1043,7 @@ async function cancelarReserva() {
 
   try {
     // PRIMEIRO salva na planilha
-    const salvo = await saveToSheet(numero, dadosParaSalvar, true);
+    const salvo = await saveToSheet(numero, dadosParaSalvar);
 
     if (salvo) {
       // DEPOIS atualiza localmente
@@ -1226,26 +1211,6 @@ window.addEventListener("error", function (event) {
     btnReservar.disabled = false;
     btnReservar.innerHTML = '<i class="fas fa-save"></i> Reservar Número(s)';
   }
-});
-
-// Também adicionar no DOMContentLoaded:
-document.addEventListener("DOMContentLoaded", async function () {
-  // Código existente...
-
-  // Adicionar timeout para operações longas
-  const originalFetch = window.fetch;
-  window.fetch = function (...args) {
-    const [resource, config] = args;
-    const timeout = config?.timeout || 15000;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    return originalFetch(resource, {
-      ...config,
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId));
-  };
 });
 
 // ============ INICIALIZAÇÃO ============
