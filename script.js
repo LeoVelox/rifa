@@ -1021,7 +1021,7 @@ async function confirmarPagamento() {
   try {
     // Usar retry para operação crítica
     const salvo = await retryOperation(async () => {
-      return await saveToSheet(dados);
+      return await saveToSheet(dadosParaSalvar);
     }, 2);
 
     if (salvo) {
@@ -1113,7 +1113,7 @@ async function cancelarReserva() {
 
   try {
     // PRIMEIRO salva na planilha
-    const salvo = await saveToSheet(dados);
+    const salvo = await saveToSheet(dadosParaSalvar);
 
     if (salvo) {
       // DEPOIS atualiza localmente
@@ -1250,7 +1250,7 @@ async function forceSaveToSheet(numero) {
   }
 
   console.log(`🔧 Forçando salvamento do número ${numero}...`);
-  return await saveToSheet(dados);
+  return await saveToSheet(item);
 }
 
 function safeAddEvent(id, event, handler) {
