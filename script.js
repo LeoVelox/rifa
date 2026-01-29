@@ -146,52 +146,36 @@ function atualizarCamposAoSelecionar() {
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSupabase(dados) {
   try {
-    // 1️⃣ Tenta atualizar pelo número
-    const updateRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/vendas?numero=eq.${dados.numero}`,
-      {
-        method: "PATCH",
-        headers: SUPABASE_HEADERS,
-        body: JSON.stringify({
-          status: dados.status,
-          nome_do_comprador: dados.comprador,
-          nome_do_vendedor: dados.vendedor,
-          nome_do_moderador: dados.autorizadoPor,
-          pagamento: dados.pagamento,
-          observacoes: dados.observacoes,
-          data_registro: new Date().toISOString()
-        })
-      }
-    );
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vendas`, {
+      method: "POST",
+      headers: {
+        ...SUPABASE_HEADERS,
+        Prefer: "resolution=merge-duplicates"
+      },
+      body: JSON.stringify({
+        numero: dados.numero,
+        status: dados.status,
+        nome_do_comprador: dados.comprador || "",
+        nome_do_vendedor: dados.vendedor || "",
+        nome_do_moderador: dados.autorizadoPor || "",
+        pagamento: dados.pagamento || "Não",
+        observacoes: dados.observacoes || "",
+        data_registro: new Date().toISOString()
+      })
+    });
 
-    // PATCH bem-sucedido (mesmo sem body)
-    if (updateRes.status === 204) return true;
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err);
+    }
 
-    // 2️⃣ Se não existir, cria
-    const insertRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/vendas`,
-      {
-        method: "POST",
-        headers: SUPABASE_HEADERS,
-        body: JSON.stringify({
-          numero: dados.numero,
-          status: dados.status,
-          nome_do_comprador: dados.comprador,
-          nome_do_vendedor: dados.vendedor,
-          nome_do_moderador: dados.autorizadoPor,
-          pagamento: dados.pagamento,
-          observacoes: dados.observacoes,
-          data_registro: new Date().toISOString()
-        })
-      }
-    );
-
-    return insertRes.ok;
-  } catch (err) {
-    console.error("❌ Erro Supabase:", err);
+    return true;
+  } catch (error) {
+    console.error("❌ Erro ao salvar no Supabase:", error);
     return false;
   }
 }
+
 
 
 // Funções auxiliares:
@@ -527,7 +511,7 @@ function updateConnectionStatus(connected, message = "") {
 
   if (connected) {
     statusElement.className = "status-conexao conectado";
-    statusElement.innerHTML = `<i class="fas fa-plug"></i> Conectado ao Google Sheets`;
+    statusElement.innerHTML = `<i class="fas fa-plug"></i> Conectado ao Banco de Dados Supabase`;
     statusElement.classList.remove("hidden");
   } else {
     statusElement.className = "status-conexao desconectado";
@@ -926,7 +910,7 @@ async function reserveNumbers() {
         };
 
         // Salva a nova reserva
-        const salvo = await saveToSheet(dados);
+        const salvo = await saveToSupabase(dados);
 
         if (salvo) {
           // Atualiza localmente
@@ -1039,7 +1023,7 @@ async function confirmarPagamento() {
   try {
     // Usar retry para operação crítica
     const salvo = await retryOperation(async () => {
-      return await saveToSheet(dadosParaSalvar);
+      return await saveToSupabase(dadosParaSalvar);
     }, 2);
 
     if (salvo) {
@@ -1131,7 +1115,7 @@ async function cancelarReserva() {
 
   try {
     // PRIMEIRO salva na planilha
-    const salvo = await saveToSheet(dadosParaSalvar);
+    const salvo = await saveToSupabase(dadosParaSalvar);
 
     if (salvo) {
       // DEPOIS atualiza localmente
@@ -1260,7 +1244,7 @@ function debounce(func, wait) {
 }
 
 // Função para forçar salvamento (debug)
-async function forceSaveToSheet(numero) {
+async function forcesaveToSupabase(numero) {
   const item = rifaData.find((item) => item.numero === numero);
   if (!item) {
     console.error(`Número ${numero} não encontrado`);
@@ -1268,7 +1252,7 @@ async function forceSaveToSheet(numero) {
   }
 
   console.log(`🔧 Forçando salvamento do número ${numero}...`);
-  return await saveToSheet(item);
+  return await saveToSupabase(item);
 }
 
 function safeAddEvent(id, event, handler) {
@@ -1277,7 +1261,7 @@ function safeAddEvent(id, event, handler) {
 }
 
 // Adicionar ao console para testes
-window.forceSave = forceSaveToSheet;
+window.forceSave = forcesaveToSupabase;
 
 // NO FINAL do arquivo, ANTES do DOMContentLoaded:
 window.addEventListener("error", function (event) {
@@ -1368,7 +1352,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   safeAddEvent("btnDebug", "click", function () {
     console.clear();
     console.log("=== 🐛 DEBUG DO SISTEMA ===");
-    console.log("📡 GAS_URL:", GAS_URL);
+    console.log("📡 Supabase:", SUPABASE_URL);
     console.log("👤 Role:", userRole);
     console.log("👥 Usuário logado:", usuarioLogado);
     console.log("🔢 Selecionados:", selectedNumbers);
