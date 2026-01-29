@@ -152,16 +152,16 @@ async function saveToSupabase(dados) {
         method: "POST",
         headers: {
           ...SUPABASE_HEADERS,
-          Prefer: "resolution=merge-duplicates"
+          Prefer: "resolution=merge-duplicates,return=representation"
         },
         body: JSON.stringify({
           numero: dados.numero,
           status: dados.status,
-          nome_do_comprador: dados.comprador || "",
-          nome_do_vendedor: dados.vendedor || "",
-          nome_do_moderador: dados.autorizadoPor || "",
-          pagamento: dados.pagamento || "Não",
-          observacoes: dados.observacoes || "",
+          nome_do_comprador: dados.comprador ?? null,
+          nome_do_vendedor: dados.vendedor ?? null,
+          nome_do_moderador: dados.autorizadoPor ?? null,
+          pagamento: dados.pagamento ?? "Não",
+          observacoes: dados.observacoes ?? null,
           data_registro: new Date().toISOString()
         })
       }
@@ -172,12 +172,16 @@ async function saveToSupabase(dados) {
       throw new Error(err);
     }
 
+    const retorno = await res.json();
+    console.log("✅ Supabase salvou:", retorno);
+
     return true;
   } catch (error) {
     console.error("❌ Erro ao salvar no Supabase:", error);
     return false;
   }
 }
+
 
 // Funções auxiliares:
 async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
@@ -988,16 +992,14 @@ async function confirmarPagamento() {
   if (!item) return;
 
   // Verificar se o pagamento já foi confirmado anteriormente
-  if (item.status === "Vendido" && item.pagamento === "Sim") {
-    showNotification(
-      `O número ${numero} já teve pagamento confirmado!`,
-      "warning",
+  if (!item.comprador || !item.vendedor) {
+  showNotification(
+    "Erro crítico: comprador ou vendedor ausente. Operação bloqueada por auditoria.",
+    "error"
     );
-    return;
-  }
-
-  // Ativar bloqueio de processamento
-  isProcessing = true;
+      isProcessing = false;
+      return;
+    }
 
   // Desabilitar botão durante processamento
   const btnConfirmar = document.getElementById("btnConfirmarPagamento");
