@@ -140,6 +140,10 @@ function atualizarCamposAoSelecionar() {
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(numero, data) {
   try {
+    console.log("📤 Iniciando saveToSheet...");
+    console.log("🔢 Número:", numero);
+    console.log("📝 Dados:", data);
+
     const payload = {
       sheet: "VENDAS",
       Número: numero.toString(),
@@ -148,11 +152,11 @@ async function saveToSheet(numero, data) {
       "Nome do Vendedor": data.vendedor,
       "Nome do moderador": data.autorizadoPor || "",
       Pagamento: data.pagamento,
-      Data: data.dataRegistro || new Date().toLocaleDateString("pt-BR"),
+      Data: data.dataRegistro,
       Observações: data.observacoes || "",
     };
 
-    console.log("📤 Enviando para Google Sheets:", payload);
+    console.log("📦 Payload para enviar:", payload);
 
     const response = await fetch(GAS_URL, {
       method: "POST",
@@ -160,20 +164,35 @@ async function saveToSheet(numero, data) {
       body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
+    console.log("📡 Resposta - Status:", response.status);
+
+    const responseText = await response.text();
+    console.log("📡 Resposta - Texto:", responseText);
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+      console.log("✅ Resposta parseada:", result);
+    } catch (e) {
+      console.error("❌ Resposta não é JSON:", e);
+      throw new Error("Resposta inválida do servidor");
     }
 
-    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        `Erro HTTP: ${response.status} - ${result.error || "Sem mensagem"}`,
+      );
+    }
 
     if (!result.success) {
-      throw new Error(result.error || "Erro ao salvar");
+      throw new Error(result.error || "Erro desconhecido ao salvar");
     }
 
-    console.log("✅ Salvo com sucesso:", result.message);
+    console.log("✅ Salvo com sucesso!");
     return true;
   } catch (error) {
-    console.error("❌ Erro ao salvar:", error);
+    console.error("❌ Erro completo no saveToSheet:", error);
+    console.error("📋 Stack:", error.stack);
     showNotification(`Erro ao salvar: ${error.message}`, "error");
     return false;
   }
@@ -245,16 +264,37 @@ async function retryOperation(operation, maxRetries = 3) {
 
 async function loadDataFromSheet() {
   try {
+    console.log("🔄 Iniciando carregamento de dados...");
+    console.log("📡 URL:", `${GAS_URL}?sheet=VENDAS`);
+
     const response = await fetch(`${GAS_URL}?sheet=VENDAS`);
 
+    console.log("📊 Status da resposta:", response.status);
+    console.log("📊 OK?", response.ok);
+
     if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
+      const errorText = await response.text();
+      console.error("❌ Resposta de erro:", errorText);
+      throw new Error(`Erro HTTP: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log("✅ Dados recebidos:", data);
+
+    // Verificar estrutura dos dados
+    if (Array.isArray(data)) {
+      console.log(`📈 Total de registros: ${data.length}`);
+      if (data.length > 0) {
+        console.log("📝 Primeiro registro:", data[0]);
+        console.log("🔑 Chaves do primeiro registro:", Object.keys(data[0]));
+      }
+    } else {
+      console.warn("⚠️ Dados não são um array:", data);
+    }
 
     // Verificar se há erro na resposta
     if (data.error) {
+      console.error("❌ Erro na resposta:", data.error);
       throw new Error(data.error);
     }
 
@@ -262,7 +302,8 @@ async function loadDataFromSheet() {
     updateConnectionStatus(true);
     return true;
   } catch (e) {
-    console.error("Erro ao carregar dados:", e);
+    console.error("💥 Erro ao carregar dados:", e);
+    console.error("📋 Stack:", e.stack);
     initRifaData();
     updateConnectionStatus(false, e.message);
     return false;
@@ -271,42 +312,114 @@ async function loadDataFromSheet() {
 
 // Processar dados da planilha
 function processSheetData(data) {
+  console.log("🔍 Iniciando processSheetData...");
+  console.log("📦 Tipo de dados:", typeof data);
+  console.log("📦 É array?", Array.isArray(data));
+
+  if (!Array.isArray(data)) {
+    console.error("❌ ERRO: dados não são array!");
+    console.error("❌ Dados recebidos:", data);
+    return;
+  }
+
   rifaData = [];
 
   // Primeiro, coletar todos os números únicos
   const numerosMap = new Map();
 
-  // Processar cada linha da planilha
-  data.forEach((row) => {
-    const numero = parseInt(row["Número"] || row["numero"] || 0);
+  console.log(`📊 Total de linhas recebidas: ${data.length}`);
 
-    if (numero > 0 && numero <= 360) {
-      // Usar o número como chave, mantendo sempre o último registro
-      numerosMap.set(numero, {
+  // Processar cada linha da planilha
+  data.forEach((row, index) => {
+    console.log(`\n📄 Processando linha ${index + 1}:`, row);
+
+    // Verificar estrutura da linha
+    if (typeof row !== "object") {
+      console.warn(`⚠️ Linha ${index} não é objeto:`, row);
+      return;
+    }
+
+    // Tentar diferentes nomes de coluna
+    let numero;
+
+    // Tentar "Número" primeiro
+    if (row["Número"] !== undefined) {
+      numero = parseInt(row["Número"]);
+      console.log(`  🔢 Número de "Número": ${numero}`);
+    }
+    // Tentar "numero" (minúsculo)
+    else if (row["numero"] !== undefined) {
+      numero = parseInt(row["numero"]);
+      console.log(`  🔢 Número de "numero": ${numero}`);
+    }
+    // Tentar "NÚMERO" (maiúsculo)
+    else if (row["NÚMERO"] !== undefined) {
+      numero = parseInt(row["NÚMERO"]);
+      console.log(`  🔢 Número de "NÚMERO": ${numero}`);
+    }
+    // Tentar primeiro campo se for número
+    else {
+      const firstKey = Object.keys(row)[0];
+      const firstValue = row[firstKey];
+      numero = parseInt(firstValue);
+      console.log(
+        `  🔢 Tentando primeiro campo "${firstKey}": ${firstValue} -> ${numero}`,
+      );
+    }
+
+    console.log(`  📊 Número final: ${numero} (é número? ${!isNaN(numero)})`);
+
+    if (!isNaN(numero) && numero > 0 && numero <= 360) {
+      // Verificar se já temos este número
+      if (numerosMap.has(numero)) {
+        console.log(`  🔄 Número ${numero} já existe, sobrescrevendo...`);
+      }
+
+      // Mapear todos os campos possíveis
+      const registro = {
         numero: numero,
-        status: row["Status"] || row["status"] || "Disponível",
+        status: row["Status"] || row["status"] || row["STATUS"] || "Disponível",
         comprador:
           row["Nome do Comprador"] ||
           row["Comprador"] ||
-          row["Nome do Comprador"] ||
+          row["nome do comprador"] ||
+          row["COMPRADOR"] ||
           "",
         vendedor:
           row["Nome do Vendedor"] ||
           row["Vendedor"] ||
-          row["Nome do Vendedor"] ||
+          row["nome do vendedor"] ||
+          row["VENDEDOR"] ||
           "",
-        pagamento: row["Pagamento"] || row["pagamento"] || "Não",
-        dataRegistro: row["Data"] || row["data"] || "",
-        observacoes: row["Observações"] || row["observacoes"] || "",
-        autorizadoPor: row["Nome do moderador"] || row["autorizadoPor"] || "",
-      });
+        pagamento:
+          row["Pagamento"] || row["pagamento"] || row["PAGAMENTO"] || "Não",
+        dataRegistro: row["Data"] || row["data"] || row["DATA"] || "",
+        observacoes:
+          row["Observações"] || row["observacoes"] || row["OBSERVAÇÕES"] || "",
+        autorizadoPor:
+          row["Nome do moderador"] ||
+          row["moderador"] ||
+          row["nome do moderador"] ||
+          row["MODERADOR"] ||
+          "",
+      };
+
+      console.log(`  ✅ Registro ${numero}:`, registro);
+      numerosMap.set(numero, registro);
+    } else {
+      console.warn(`  ⚠️ Ignorando número inválido: ${numero}`);
     }
   });
+
+  console.log(`\n🗂️ Total de números únicos encontrados: ${numerosMap.size}`);
 
   // Converter map para array
   rifaData = Array.from(numerosMap.values());
 
   // Completar números faltantes (1 a 360)
+  console.log(`\n🔍 Completando números de 1 a 360...`);
+  let completados = 0;
+
   for (let i = 1; i <= 360; i++) {
     if (!rifaData.find((item) => item.numero === i)) {
       rifaData.push({
@@ -319,13 +432,19 @@ function processSheetData(data) {
         observacoes: "",
         autorizadoPor: "",
       });
+      completados++;
     }
   }
+
+  console.log(`✅ Números completados: ${completados}`);
 
   // Ordenar por número
   rifaData.sort((a, b) => a.numero - b.numero);
 
-  console.log(`📊 Dados processados: ${rifaData.length} números`);
+  console.log(`\n🎉 Processamento completo!`);
+  console.log(`📊 Total no rifaData: ${rifaData.length} números`);
+  console.log(`📋 Primeiros 3 registros:`, rifaData.slice(0, 3));
+
   updateCounters();
   generateRifaGrid();
 }
@@ -1306,3 +1425,64 @@ document.addEventListener("DOMContentLoaded", async function () {
     await loadDataFromSheet();
   }, 500);
 });
+
+// Adicione isto antes do fechamento do DOMContentLoaded
+document.getElementById("btnDebug").addEventListener("click", function () {
+  console.clear();
+  console.log("=== 🐛 DEBUG DO SISTEMA ===");
+  console.log("📡 URL do GAS:", GAS_URL);
+  console.log("👤 Role atual:", userRole);
+  console.log("🔢 Números selecionados:", selectedNumbers);
+  console.log("📊 Total em rifaData:", rifaData.length);
+  console.log("📋 Primeiros 5 registros:", rifaData.slice(0, 5));
+
+  // Verificar estrutura de um registro
+  if (rifaData.length > 0) {
+    console.log("🔍 Estrutura do primeiro registro:");
+    const sample = rifaData[0];
+    for (const key in sample) {
+      console.log(`  ${key}: "${sample[key]}" (${typeof sample[key]})`);
+    }
+  }
+
+  // Testar a URL diretamente
+  fetch(`${GAS_URL}?sheet=VENDAS`)
+    .then((r) => {
+      console.log("📡 Teste fetch - Status:", r.status);
+      return r.text();
+    })
+    .then((text) => {
+      console.log("📡 Teste fetch - Primeiros 500 chars:");
+      console.log(text.substring(0, 500));
+      try {
+        const json = JSON.parse(text);
+        console.log("✅ JSON parseado com sucesso!");
+        console.log("📊 Tipo:", Array.isArray(json) ? "Array" : "Object");
+        if (Array.isArray(json)) {
+          console.log("📈 Tamanho do array:", json.length);
+        }
+      } catch (e) {
+        console.error("❌ Não é JSON válido:", e.message);
+      }
+    })
+    .catch((e) => console.error("❌ Erro no fetch:", e));
+});
+
+document
+  .getElementById("btnTestLoad")
+  .addEventListener("click", async function () {
+    console.log("🔄 Testando carga de dados...");
+    await loadDataFromSheet();
+  });
+
+// Adicione também uma função para forçar reload
+window.debugReload = async function () {
+  console.clear();
+  console.log("🔄 Recarregando dados...");
+  const success = await loadDataFromSheet();
+  if (success) {
+    showNotification("Dados recarregados com sucesso!", "success");
+  } else {
+    showNotification("Falha ao recarregar dados", "error");
+  }
+};
