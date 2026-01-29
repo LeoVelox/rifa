@@ -139,7 +139,11 @@ function atualizarCamposAoSelecionar() {
 
 // SALVAR/ATUALIZAR NA PLANILHA
 async function saveToSheet(numero, data) {
-  return new Promise((resolve) => {
+  try {
+    console.log("📤 Iniciando saveToSheet...");
+    console.log("🔢 Número:", numero);
+    console.log("📝 Dados:", data);
+
     const payload = {
       sheet: "VENDAS",
       Número: numero.toString(),
@@ -152,51 +156,46 @@ async function saveToSheet(numero, data) {
       Observações: data.observacoes || "",
     };
 
-    console.log("📤 Enviando via formulário:", payload);
+    console.log("📦 Payload para enviar:", payload);
 
-    // Criar formulário invisível
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = GAS_URL;
-    form.target = "_blank"; // Abrir em nova aba/janela
-    form.style.display = "none";
-
-    // Adicionar campos
-    Object.keys(payload).forEach((key) => {
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = key;
-      input.value = payload[key];
-      form.appendChild(input);
+    const response = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
 
-    // Adicionar ao documento e submeter
-    document.body.appendChild(form);
-    form.submit();
+    console.log("📡 Resposta - Status:", response.status);
 
-    // Remover formulário
-    setTimeout(() => {
-      document.body.removeChild(form);
+    const responseText = await response.text();
+    console.log("📡 Resposta - Texto:", responseText);
 
-      // Atualizar localmente (assumindo sucesso)
-      const item = rifaData.find((item) => item.numero === numero);
-      if (item) {
-        item.status = data.status;
-        item.comprador = data.comprador;
-        item.vendedor = data.vendedor;
-        item.pagamento = data.pagamento;
-        item.autorizadoPor = data.autorizadoPor;
-        item.observacoes = data.observacoes;
-        item.dataRegistro = data.dataRegistro;
-      }
+    let result;
+    try {
+      result = JSON.parse(responseText);
+      console.log("✅ Resposta parseada:", result);
+    } catch (e) {
+      console.error("❌ Resposta não é JSON:", e);
+      throw new Error("Resposta inválida do servidor");
+    }
 
-      updateCounters();
-      generateRifaGrid();
+    if (!response.ok) {
+      throw new Error(
+        `Erro HTTP: ${response.status} - ${result.error || "Sem mensagem"}`,
+      );
+    }
 
-      console.log("✅ Dados enviados via formulário");
-      resolve(true);
-    }, 1000);
-  });
+    if (!result.success) {
+      throw new Error(result.error || "Erro desconhecido ao salvar");
+    }
+
+    console.log("✅ Salvo com sucesso!");
+    return true;
+  } catch (error) {
+    console.error("❌ Erro completo no saveToSheet:", error);
+    console.error("📋 Stack:", error.stack);
+    showNotification(`Erro ao salvar: ${error.message}`, "error");
+    return false;
+  }
 }
 
 async function saveWithDeleteAndCreate(numero, sheetData) {
